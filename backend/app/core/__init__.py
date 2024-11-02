@@ -14,9 +14,6 @@ from .exceptions import (
     DuplicateError
 )
 
-# Version
-__version__ = "0.1.0"
-
 __all__ = [
     "settings",
     "create_access_token",

@@ -1,11 +1,11 @@
 from fastapi import APIRouter
-from .routes import auth, groups, passwords
+from .routes import auth_router, groups_router, passwords_router
 
 api_router = APIRouter()
 
 # Include all routers
-api_router.include_router(auth.router)
-api_router.include_router(groups.router)
-api_router.include_router(passwords.router)
+api_router.include_router(auth_router)
+api_router.include_router(groups_router)
+api_router.include_router(passwords_router)
 
 __all__ = ["api_router"]

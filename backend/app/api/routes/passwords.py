@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends
 from typing import Any, List
-from ....services import PasswordService, AuthService, EncryptionService
-from ....models.schemas import Password, PasswordCreate, PasswordUpdate, User
+from app.services import PasswordService, AuthService, EncryptionService
+from app.models.schemas import Password, PasswordCreate, PasswordUpdate, User
 
 router = APIRouter(prefix="/passwords", tags=["passwords"])
 

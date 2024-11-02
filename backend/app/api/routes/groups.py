@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends
 from typing import Any, List
-from ....services import GroupService, AuthService
-from ....models.schemas import Group, GroupCreate, GroupUpdate, User
+from app.services import GroupService, AuthService
+from app.models.schemas import Group, GroupCreate, GroupUpdate, User
 
 router = APIRouter(prefix="/groups", tags=["groups"])
 
