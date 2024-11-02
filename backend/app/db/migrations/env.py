@@ -1,19 +1,10 @@
-import os
-import sys
+# file: app/db/migrations/env.py
 from logging.config import fileConfig
 from sqlalchemy import engine_from_config
 from sqlalchemy import pool
 from alembic import context
-
-# Add the application root directory to Python path
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(
-    os.path.dirname(os.path.abspath(__file__))
-))))
-
 from app.core.config import settings
 from app.db.base import Base
-# Import all models to ensure they are known to SQLAlchemy
-from app.db.models import *
 
 # this is the Alembic Config object
 config = context.config
@@ -22,15 +13,18 @@ config = context.config
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
-# Set sqlalchemy.url in alembic.ini
-config.set_main_option("sqlalchemy.url", str(settings.SQLALCHEMY_DATABASE_URI))
-
-# Add your model's MetaData object here for 'autogenerate' support
 target_metadata = Base.metadata
+
+def get_url():
+    user = settings.POSTGRES_USER
+    password = settings.POSTGRES_PASSWORD
+    server = settings.POSTGRES_SERVER
+    db = settings.POSTGRES_DB
+    return f"postgresql://{user}:{password}@{server}/{db}"
 
 def run_migrations_offline() -> None:
     """Run migrations in 'offline' mode."""
-    url = config.get_main_option("sqlalchemy.url")
+    url = get_url()
     context.configure(
         url=url,
         target_metadata=target_metadata,
@@ -43,11 +37,14 @@ def run_migrations_offline() -> None:
 
 def run_migrations_online() -> None:
     """Run migrations in 'online' mode."""
-    configuration = config.get_section(config.config_ini_section)
-    configuration["sqlalchemy.url"] = str(settings.SQLALCHEMY_DATABASE_URI)
+    configuration = {
+        'sqlalchemy.url': get_url(),
+        'sqlalchemy.pool_pre_ping': True,
+    }
+
     connectable = engine_from_config(
         configuration,
-        prefix="sqlalchemy.",
+        prefix='sqlalchemy.',
         poolclass=pool.NullPool,
     )
 

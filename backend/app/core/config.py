@@ -1,8 +1,9 @@
+# Add these imports at the beginning of config.py
+import os
 from typing import Optional, List
 from pydantic_settings import BaseSettings
 from pydantic import PostgresDsn, validator
 import secrets
-from pathlib import Path
 
 class Settings(BaseSettings):
     # API Configuration
@@ -15,10 +16,10 @@ class Settings(BaseSettings):
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
     
     # Database
-    POSTGRES_SERVER: str
-    POSTGRES_USER: str
-    POSTGRES_PASSWORD: str
-    POSTGRES_DB: str
+    POSTGRES_SERVER: str = "localhost"  # Add default
+    POSTGRES_USER: str = "password_vault"  # Add default
+    POSTGRES_PASSWORD: str = ""  # Will be set by environment
+    POSTGRES_DB: str = "password_vault"  # Add default
     SQLALCHEMY_DATABASE_URI: Optional[PostgresDsn] = None
 
     # CORS Configuration
@@ -26,19 +27,29 @@ class Settings(BaseSettings):
 
     @validator("SQLALCHEMY_DATABASE_URI", pre=True)
     def assemble_db_connection(cls, v: Optional[str], values: dict[str, any]) -> any:
-        if v:
+        if isinstance(v, str):
             return v
+        
+        # Ensure we have all required values
+        user = values.get("POSTGRES_USER", "password_vault")
+        password = values.get("POSTGRES_PASSWORD", "")
+        server = values.get("POSTGRES_SERVER", "localhost")
+        db = values.get("POSTGRES_DB", "password_vault")
+        
+        if not all([user, password, server, db]):
+            raise ValueError("Missing database configuration values")
+        
         return PostgresDsn.build(
             scheme="postgresql",
-            username=values.get("POSTGRES_USER"),
-            password=values.get("POSTGRES_PASSWORD"),
-            host=values.get("POSTGRES_SERVER"),
-            path=f"/{values.get('POSTGRES_DB') or ''}",
+            username=user,
+            password=password,
+            host=server,
+            path=f"/{db}",
         )
 
     class Config:
+        case_sensitive = True
         env_file = ".env"
         env_file_encoding = "utf-8"
-        case_sensitive = True
 
 settings = Settings()

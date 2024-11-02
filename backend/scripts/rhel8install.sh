@@ -32,30 +32,14 @@ generate_password() {
     openssl rand -hex 16
 }
 
-# Path detection and setup
-if [[ "$(basename $(pwd))" == "scripts" ]]; then
-    BACKEND_DIR="$(dirname $(pwd))"
-else
-    BACKEND_DIR="$(pwd)"
-fi
-
-log_info "Backend directory detected as: ${BACKEND_DIR}"
-
-# Verify we're in the right place
-if [ ! -f "${BACKEND_DIR}/requirements.txt" ] || [ ! -d "${BACKEND_DIR}/app" ]; then
-    log_error "Cannot find required files. Please run this script from the backend directory or its scripts subdirectory."
-    exit 1
-fi
-
 # Default values
 INSTALL_DIR="/opt/password-vault"
 CONFIG_DIR="/etc/password-vault"
 LOG_DIR="/var/log/password-vault"
 DATA_DIR="/var/lib/password-vault"
-SERVICE_USER="password_vault"
-SERVICE_GROUP="password_vault"
+SERVICE_USER="password-vault"
+SERVICE_GROUP="password-vault"
 PYTHON_VENV="${INSTALL_DIR}/venv"
-DB_NAME="password_vault"  # explicitly define database name
 
 # Generate secure passwords
 DB_PASSWORD=$(generate_password)
@@ -78,26 +62,24 @@ ACCESS_TOKEN_EXPIRE_MINUTES=30
 POSTGRES_SERVER=localhost
 POSTGRES_USER=${SERVICE_USER}
 POSTGRES_PASSWORD=${DB_PASSWORD}
-POSTGRES_DB=${DB_NAME}
+POSTGRES_DB=password_vault
 
 # CORS
 BACKEND_CORS_ORIGINS=["http://localhost:3000"]
 EOF
 
-    # Create a copy in the backend directory for development
-    cp "${CONFIG_DIR}/.env" "${BACKEND_DIR}/.env"
-    log_info "Created .env file and development copy"
+    # Create a copy in the current directory for development
+    cp "${CONFIG_DIR}/.env" .env
 }
 
 # Create required directories
 create_directories() {
     log_info "Creating directory structure..."
-    mkdir -p "${INSTALL_DIR}/app"
+    mkdir -p "${INSTALL_DIR}"
     mkdir -p "${CONFIG_DIR}"
     mkdir -p "${LOG_DIR}"
     mkdir -p "${DATA_DIR}"
     mkdir -p "${DATA_DIR}/db"
-    log_info "Created directory structure"
 }
 
 # Create service user and group
@@ -109,42 +91,21 @@ create_service_user() {
     if ! getent passwd "${SERVICE_USER}" >/dev/null; then
         useradd -r -g "${SERVICE_GROUP}" -d "${INSTALL_DIR}" -s /sbin/nologin "${SERVICE_USER}"
     fi
-    log_info "Created service user and group"
 }
 
 # Install system dependencies
 install_system_deps() {
     log_info "Installing system dependencies..."
-    
-    # Enable CodeReady repository for additional packages
-    subscription-manager repos --enable codeready-builder-for-rhel-9-$(arch)-rpms
-    
-    # Enable EPEL
-    dnf install -y https://dl.fedoraproject.org/pub/epel/epel-release-latest-9.noarch.rpm
-    
-    # Install development tools
-    dnf group install -y "Development Tools"
-    
-    # Install Python and development packages
-    dnf install -y python3-devel python3-pip
-    
-    # Install PostgreSQL
-    dnf install -y postgresql-server postgresql-contrib postgresql-devel
-    
-    # Additional required dependencies
-    dnf install -y openssl-devel libffi-devel
-
-    log_info "Installed system dependencies"
+    dnf install -y python39 python39-devel postgresql-server postgresql-contrib postgresql-devel gcc
 }
 
 # Install Python dependencies
 install_python_deps() {
     log_info "Installing Python dependencies..."
-    python3 -m venv "${PYTHON_VENV}"
+    python3.9 -m venv "${PYTHON_VENV}"
     source "${PYTHON_VENV}/bin/activate"
     pip install --upgrade pip
-    pip install -r "${BACKEND_DIR}/requirements.txt"
-    log_info "Installed Python dependencies"
+    pip install -r requirements.txt
 }
 
 # Initialize and configure PostgreSQL
@@ -167,74 +128,18 @@ EOF
 
     # Start PostgreSQL
     systemctl enable postgresql
-    systemctl restart postgresql
+    systemctl start postgresql
 
     # Wait for PostgreSQL to be ready
     log_info "Waiting for PostgreSQL to start..."
-    RETRIES=0
     while ! sudo -u postgres psql -c '\l' >/dev/null 2>&1; do
         sleep 1
-        RETRIES=$((RETRIES + 1))
-        if [ $RETRIES -gt 30 ]; then
-            log_error "PostgreSQL did not start within 30 seconds"
-            exit 1
-        fi
     done
 
     # Create database and user
     log_info "Creating database and user..."
-    cd /tmp
-    sudo -u postgres psql << EOF
-DROP DATABASE IF EXISTS password_vault;
-DROP USER IF EXISTS ${SERVICE_USER};
-CREATE USER ${SERVICE_USER} WITH PASSWORD '${DB_PASSWORD}' CREATEDB;
-CREATE DATABASE password_vault WITH OWNER = ${SERVICE_USER};
-\c password_vault
-CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
-ALTER DATABASE password_vault OWNER TO ${SERVICE_USER};
-GRANT ALL ON SCHEMA public TO ${SERVICE_USER};
-EOF
-
-    cd - > /dev/null
-    log_info "Database setup complete"
-}
-
-# Initialize database schema
-init_database() {
-    log_info "Initializing database schema..."
-    
-    # Clean up any __pycache__ directories
-    find "${BACKEND_DIR}/app" -type d -name "__pycache__" -exec rm -rf {} +
-    
-    # Create app directory and copy files
-    mkdir -p "${INSTALL_DIR}/app"
-    cp -rv "${BACKEND_DIR}/app"/* "${INSTALL_DIR}/app/"
-    cp -v "${BACKEND_DIR}/alembic.ini" "${INSTALL_DIR}/"
-
-    # Create environment file
-    cat > "${INSTALL_DIR}/.env" << EOF
-POSTGRES_SERVER=localhost
-POSTGRES_USER=${SERVICE_USER}
-POSTGRES_PASSWORD=${DB_PASSWORD}
-POSTGRES_DB=password_vault
-EOF
-
-    # Update PYTHONPATH and activate venv
-    source "${PYTHON_VENV}/bin/activate"
-    export PYTHONPATH="${INSTALL_DIR}"
-    export POSTGRES_SERVER=localhost
-    export POSTGRES_USER="${SERVICE_USER}"
-    export POSTGRES_PASSWORD="${DB_PASSWORD}"
-    export POSTGRES_DB="password_vault"
-
-    cd "${INSTALL_DIR}"
-    
-    # Run database migrations
-    log_info "Running database migrations..."
-    alembic upgrade head
-
-    cd - > /dev/null
-    log_info "Database schema initialized"
+    sudo -u postgres psql -c "CREATE USER ${SERVICE_USER} WITH PASSWORD '${DB_PASSWORD}';"
+    sudo -u postgres psql -c "CREATE DATABASE password_vault OWNER ${SERVICE_USER};"
 }
 
 # Configure systemd service
@@ -260,51 +165,16 @@ EOF
 
     systemctl daemon-reload
     systemctl enable password-vault
-    log_info "Systemd service configured"
 }
+
 # Initialize database schema
 init_database() {
     log_info "Initializing database schema..."
-    
-    # Create app directory in install location
-    mkdir -p "${INSTALL_DIR}/app"
-    
-    # Copy files from backend directory
-    log_info "Copying application files..."
-    cp -rv "${BACKEND_DIR}/app"/* "${INSTALL_DIR}/app/"
-    cp -v "${BACKEND_DIR}/alembic.ini" "${INSTALL_DIR}/"
-
-    # Update alembic.ini
-    local DB_URL="postgresql://${SERVICE_USER}:${DB_PASSWORD}@localhost/${DB_NAME}"
-    sed -i "s#sqlalchemy.url = .*#sqlalchemy.url = ${DB_URL}#" "${INSTALL_DIR}/alembic.ini"
-    
-    # Create environment file
-    cat > "${INSTALL_DIR}/.env" << EOF
-POSTGRES_SERVER=localhost
-POSTGRES_USER=${SERVICE_USER}
-POSTGRES_PASSWORD=${DB_PASSWORD}
-POSTGRES_DB=${DB_NAME}
-EOF
-
-    # Activate virtual environment and set environment variables
     source "${PYTHON_VENV}/bin/activate"
     export PYTHONPATH="${INSTALL_DIR}"
-    export POSTGRES_SERVER=localhost
-    export POSTGRES_USER="${SERVICE_USER}"
-    export POSTGRES_PASSWORD="${DB_PASSWORD}"
-    export POSTGRES_DB="${DB_NAME}"
-    
-    # Change to install directory
-    cd "${INSTALL_DIR}"
-    
-    # Run migrations
-    log_info "Running database migrations..."
     alembic upgrade head
-    
-    # Return to original directory
-    cd - > /dev/null
-    log_info "Database schema initialized"
 }
+
 # Set proper permissions
 set_permissions() {
     log_info "Setting permissions..."
@@ -318,7 +188,6 @@ set_permissions() {
     chmod 750 "${LOG_DIR}"
     chmod 750 "${DATA_DIR}"
     chmod 600 "${CONFIG_DIR}/.env"
-    log_info "Permissions set"
 }
 
 # Main installation process
@@ -337,7 +206,7 @@ main() {
     
     log_info "Installation completed successfully!"
     log_info "Your credentials have been saved to: ${CONFIG_DIR}/.env"
-    log_info "A copy of the .env file has been created in the backend directory"
+    log_info "A copy of the .env file has been created in the current directory"
     log_info "You can start the service with: systemctl start password-vault"
 }
 
