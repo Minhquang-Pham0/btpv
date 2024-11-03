@@ -1,10 +1,9 @@
 from sqlalchemy import Column, Integer, String, ForeignKey
 from sqlalchemy.orm import relationship
-from ...db.base import Base
-from .user import group_members
+from ...db.base_class import Base
 
 class Group(Base):
-    __tablename__ = "groups"
+    __tablename__ = 'groups'  # Explicitly set table name
 
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String, index=True)
@@ -15,7 +14,7 @@ class Group(Base):
     owner = relationship("User", back_populates="owned_groups")
     members = relationship(
         "User",
-        secondary=group_members,
+        secondary="group_members",
         back_populates="member_of_groups"
     )
     passwords = relationship("Password", back_populates="group")

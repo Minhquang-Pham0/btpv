@@ -1,17 +1,17 @@
 from sqlalchemy import Boolean, Column, Integer, String, Table, ForeignKey
 from sqlalchemy.orm import relationship
-from ...db.base import Base
+from ...db.base_class import Base
 
 # Association table for user-group many-to-many relationship
 group_members = Table(
-    "group_members",
+    'group_members',
     Base.metadata,
-    Column("user_id", Integer, ForeignKey("users.id"), primary_key=True),
-    Column("group_id", Integer, ForeignKey("groups.id"), primary_key=True)
+    Column('user_id', Integer, ForeignKey('users.id'), primary_key=True),
+    Column('group_id', Integer, ForeignKey('groups.id'), primary_key=True)
 )
 
 class User(Base):
-    __tablename__ = "users"
+    __tablename__ = 'users'  # Explicitly set table name
 
     id = Column(Integer, primary_key=True, index=True)
     username = Column(String, unique=True, index=True)

@@ -1,10 +1,10 @@
 from sqlalchemy import Column, Integer, String, ForeignKey, DateTime
-from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
-from ...db.base import Base
+from sqlalchemy.orm import relationship
+from ...db.base_class import Base
 
 class Password(Base):
-    __tablename__ = "passwords"
+    __tablename__ = 'passwords'  # Explicitly set table name
 
     id = Column(Integer, primary_key=True, index=True)
     title = Column(String, index=True)

@@ -1,11 +1,12 @@
-from typing import Generator
-from .base import SessionLocal
+# app/db/session.py
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
+from ..core.config import settings
 
-def get_db() -> Generator:
-    """
-    Get database session.
-    This should be used as a FastAPI dependency.
-    """
+engine = create_engine(str(settings.SQLALCHEMY_DATABASE_URI))
+SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+
+def get_db():
     db = SessionLocal()
     try:
         yield db

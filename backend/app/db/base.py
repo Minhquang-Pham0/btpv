@@ -1,12 +1,9 @@
-# file: app/db/base.py
-from sqlalchemy import create_engine
-from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import sessionmaker
-from app.core.config import settings
+from .base_class import Base
+from .session import engine, SessionLocal, get_db
 
-# Create database URL
-DATABASE_URL = f"postgresql://{settings.POSTGRES_USER}:{settings.POSTGRES_PASSWORD}@{settings.POSTGRES_SERVER}/{settings.POSTGRES_DB}"
+# Import models for Alembic
+from app.models.entities.user import User  # noqa
+from app.models.entities.group import Group  # noqa
+from app.models.entities.password import Password  # noqa
 
-engine = create_engine(DATABASE_URL)
-SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
-Base = declarative_base()
+__all__ = ["Base", "engine", "SessionLocal", "User", "Group", "Password"]
