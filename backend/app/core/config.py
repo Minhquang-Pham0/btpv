@@ -1,4 +1,3 @@
-# Add these imports at the beginning of config.py
 import os
 from typing import Optional, List
 from pydantic_settings import BaseSettings
@@ -16,10 +15,10 @@ class Settings(BaseSettings):
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
     
     # Database
-    POSTGRES_SERVER: str = "localhost"  # Add default
-    POSTGRES_USER: str = "password_vault"  # Add default
-    POSTGRES_PASSWORD: str = ""  # Will be set by environment
-    POSTGRES_DB: str = "password_vault"  # Add default
+    POSTGRES_SERVER: str = "localhost"
+    POSTGRES_USER: str = "password_vault"
+    POSTGRES_PASSWORD: str
+    POSTGRES_DB: str = "password_vault"
     SQLALCHEMY_DATABASE_URI: Optional[PostgresDsn] = None
 
     # CORS Configuration
@@ -30,22 +29,26 @@ class Settings(BaseSettings):
         if isinstance(v, str):
             return v
         
-        # Ensure we have all required values
-        user = values.get("POSTGRES_USER", "password_vault")
-        password = values.get("POSTGRES_PASSWORD", "")
-        server = values.get("POSTGRES_SERVER", "localhost")
-        db = values.get("POSTGRES_DB", "password_vault")
-        
+        # Get required values with error handling
+        user = values.get("POSTGRES_USER")
+        password = values.get("POSTGRES_PASSWORD")
+        server = values.get("POSTGRES_SERVER")
+        db = values.get("POSTGRES_DB")
+
+        # Validate all required values are present
         if not all([user, password, server, db]):
-            raise ValueError("Missing database configuration values")
-        
-        return PostgresDsn.build(
-            scheme="postgresql",
-            username=user,
-            password=password,
-            host=server,
-            path=f"/{db}",
-        )
+            missing = [
+                key for key, value in {
+                    "POSTGRES_USER": user,
+                    "POSTGRES_PASSWORD": password,
+                    "POSTGRES_SERVER": server,
+                    "POSTGRES_DB": db
+                }.items() if not value
+            ]
+            raise ValueError(f"Missing database configuration values: {', '.join(missing)}")
+
+        # Build the database URL
+        return f"postgresql://{user}:{password}@{server}/{db}"
 
     class Config:
         case_sensitive = True
