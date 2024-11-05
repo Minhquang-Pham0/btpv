@@ -10,14 +10,14 @@ class GroupService:
     def __init__(self, db: Session = Depends(get_db)):
         self.db = db
 
-    async def create_group(self, group_data: GroupCreate, owner: User) -> Group:
+    async def create_group(self, group_data: GroupCreate, user: User) -> Group:
         """Create a new group"""
         group = Group(
             name=group_data.name,
             description=group_data.description,
-            owner_id=owner.id
+            owner_id=user.id
         )
-        group.members.append(owner)  # Owner is automatically a member
+        group.members.append(user)  # Owner is automatically a member
         
         self.db.add(group)
         self.db.commit()
@@ -76,7 +76,9 @@ class GroupService:
 
     async def get_user_groups(self, user: User) -> List[Group]:
         """Get all groups a user is a member of"""
-        return user.member_of_groups
+        return self.db.query(Group).filter(
+            (Group.owner_id == user.id) | (Group.members.any(id=user.id))
+        ).all()
 
     async def update_group(self, group_id: int, group_data: GroupUpdate, current_user: User) -> Group:
         """Update a group's details"""
