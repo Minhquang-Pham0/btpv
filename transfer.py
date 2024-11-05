@@ -1,13 +1,47 @@
-# app/api/routes/passwords.py
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+from .core.config import settings
+from .api.routes import auth, users, groups, passwords
+
+app = FastAPI(
+    title=settings.PROJECT_NAME,
+    openapi_url=f"{settings.API_V1_STR}/openapi.json"
+)
+
+# Set up CORS
+if settings.BACKEND_CORS_ORIGINS:
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=[str(origin) for origin in settings.BACKEND_CORS_ORIGINS],
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
+
+# Health check endpoint
+@app.get("/health")
+def health_check():
+    return {"status": "healthy"}
+
+# Include routers with the API prefix
+app.include_router(auth.router, prefix=settings.API_V1_STR)
+app.include_router(groups.router, prefix=settings.API_V1_STR)
+app.include_router(passwords.router, prefix=settings.API_V1_STR)
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=8000)
+    
+    
+    from fastapi import APIRouter, Depends, HTTPException
 from typing import Any, List
 from ..services.password_service import PasswordService
 from ..services.auth_service import AuthService
 from ..core.security import oauth2_scheme
 from ..models.schemas import Password, PasswordCreate, PasswordUpdate
 from ..models.entities import User
-from ..core.exceptions import NotFoundError, PermissionDenied
 
+# Remove /api/v1 from the prefix as it's already included in main.py
 router = APIRouter(prefix="/passwords", tags=["passwords"])
 
 async def get_current_user(
@@ -16,62 +50,53 @@ async def get_current_user(
 ) -> User:
     return await auth_service.get_current_user(token)
 
-@router.get("/group/{group_id}", response_model=List[Password])
-async def get_group_passwords(
-    group_id: int,
+@router.post("", response_model=Password)
+async def create_password(
+    password_data: PasswordCreate,
     password_service: PasswordService = Depends(),
     current_user: User = Depends(get_current_user)
-) -> List[Password]:
-    """Get all passwords in a group."""
+) -> Any:
+    """Create new password entry."""
     try:
-        if not group_id or not isinstance(group_id, int):
-            raise HTTPException(
-                status_code=422,
-                detail="Invalid group ID provided"
-            )
-        
-        return await password_service.get_group_passwords(group_id, current_user)
-    
-    except NotFoundError as e:
-        raise HTTPException(status_code=404, detail=str(e))
-    except PermissionDenied as e:
-        raise HTTPException(status_code=403, detail=str(e))
+        return await password_service.create_password(password_data, current_user)
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=400, detail=str(e))
 
-# app/services/password_service.py
-class PasswordService:
-    def __init__(
-        self,
-        db: Session = Depends(get_db),
-        encryption: EncryptionService = Depends()
-    ):
-        self.db = db
-        self.encryption = encryption
+# ... rest of the router code remains the same ...
 
-    async def get_group_passwords(self, group_id: int, user: User) -> List[Password]:
-        """Get all passwords in a group"""
-        # Verify user is member of the group
-        group = self.db.query(Group).filter(Group.id == group_id).first()
-        if not group:
-            raise NotFoundError("Group not found")
-            
-        if user not in group.members:
-            raise PermissionDenied("You don't have access to this group")
 
-        # Get passwords
-        passwords = self.db.query(Password).filter(Password.group_id == group_id).all()
-        
-        # Return passwords without decrypted values
-        return [
-            Password(
-                id=p.id,
-                title=p.title,
-                username=p.username,
-                url=p.url,
-                notes=p.notes,
-                group_id=p.group_id,
-                created_at=p.created_at,
-                updated_at=p.updated_at
-            ) for p in passwords
-        ]
+from fastapi import APIRouter, Depends, HTTPException
+from typing import Any, List
+from ..services import GroupService
+from ..services.auth_service import AuthService
+from ..core.security import verify_access_token, oauth2_scheme
+from ..models.schemas import Group, GroupCreate, GroupUpdate, User
+from ..models.entities import User as UserModel
+
+# Remove /api/v1 from the prefix
+router = APIRouter(prefix="/groups", tags=["groups"])
+
+async def get_current_user(
+    auth_service: AuthService = Depends(),
+    token: str = Depends(oauth2_scheme)
+) -> UserModel:
+    return await auth_service.get_current_user(token)
+
+@router.post("", response_model=Group)
+async def create_group(
+    group_data: GroupCreate,
+    group_service: GroupService = Depends(),
+    current_user: UserModel = Depends(get_current_user)
+) -> Any:
+    """Create new group."""
+    try:
+        return await group_service.create_group(group_data, current_user)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+# ... rest of the router code remains the same ...
+
+
+    
+    
+    
