@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from app.core.config import settings
-from app.api import api_router
+from .core.config import settings
+from .api.routes import auth, groups, passwords
 
 app = FastAPI(
     title=settings.PROJECT_NAME,
@@ -18,13 +18,15 @@ if settings.BACKEND_CORS_ORIGINS:
         allow_headers=["*"],
     )
 
-# Include router
-app.include_router(api_router, prefix=settings.API_V1_STR)
-
 # Health check endpoint
 @app.get("/health")
 def health_check():
     return {"status": "healthy"}
+
+# Include routers with the API prefix
+app.include_router(auth.router, prefix=settings.API_V1_STR)
+app.include_router(groups.router, prefix=settings.API_V1_STR)
+app.include_router(passwords.router, prefix=settings.API_V1_STR)
 
 if __name__ == "__main__":
     import uvicorn

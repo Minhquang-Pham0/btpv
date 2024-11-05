@@ -134,6 +134,7 @@ EOF
 
     # Restart PostgreSQL to apply configuration
     systemctl restart postgresql
+    systemctl enable postgresql
     
     # Wait for PostgreSQL to be ready
     log_info "Waiting for PostgreSQL to start..."

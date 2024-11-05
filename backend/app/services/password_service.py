@@ -1,10 +1,10 @@
 from typing import List
 from sqlalchemy.orm import Session
 from fastapi import Depends
-from ..models.entities import Password, User
-from ..models.schemas import PasswordCreate, PasswordUpdate
-from ..core.exceptions import NotFoundError, PermissionDenied
-from ..db import get_db
+from app.models.entities import Password, User, Group
+from app.models.schemas import PasswordCreate, PasswordUpdate
+from app.core.exceptions import NotFoundError, PermissionDenied
+from app.db import get_db
 from .encryption_service import EncryptionService
 
 class PasswordService:
@@ -107,9 +107,20 @@ class PasswordService:
         
         return self.db.query(Password).filter(Password.group_id == group_id).all()
 
-    async def _verify_group_access(self, group_id: int, user: User) -> bool:
+    async def _verify_group_access(self, group_id: int, user: User) -> Group:
         """Verify user has access to the group"""
-        group = user.member_of_groups.filter_by(id=group_id).first()
+        # Check if user is a member of the group using a proper query
+        group = (
+            self.db.query(Group)
+            .join(Group.members)
+            .filter(
+                Group.id == group_id,
+                User.id == user.id
+            )
+            .first()
+        )
+        
         if not group:
             raise PermissionDenied("You don't have access to this group")
+        
         return group
