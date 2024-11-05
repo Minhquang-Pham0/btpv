@@ -1,102 +1,126 @@
-from fastapi import FastAPI
-from fastapi.middleware.cors import CORSMiddleware
-from .core.config import settings
-from .api.routes import auth, users, groups, passwords
+from typing import List
+from sqlalchemy.orm import Session
+from fastapi import Depends
+from ..models.entities import Password, User, Group
+from ..models.schemas import PasswordCreate, PasswordUpdate
+from ..core.exceptions import NotFoundError, PermissionDenied
+from ..db import get_db
+from .encryption_service import EncryptionService
 
-app = FastAPI(
-    title=settings.PROJECT_NAME,
-    openapi_url=f"{settings.API_V1_STR}/openapi.json"
-)
+class PasswordService:
+    def __init__(
+        self,
+        db: Session = Depends(get_db),
+        encryption: EncryptionService = Depends()
+    ):
+        self.db = db
+        self.encryption = encryption
 
-# Set up CORS
-if settings.BACKEND_CORS_ORIGINS:
-    app.add_middleware(
-        CORSMiddleware,
-        allow_origins=[str(origin) for origin in settings.BACKEND_CORS_ORIGINS],
-        allow_credentials=True,
-        allow_methods=["*"],
-        allow_headers=["*"],
-    )
+    async def create_password(self, password_data: PasswordCreate, current_user: User) -> Password:
+        """Create a new password entry"""
+        # Verify user is member of the group
+        group = await self._verify_group_access(password_data.group_id, current_user)
+        
+        # Encrypt the password
+        encrypted_password = self.encryption.encrypt_password(password_data.password)
+        
+        password = Password(
+            title=password_data.title,
+            username=password_data.username,
+            encrypted_password=encrypted_password,
+            url=password_data.url,
+            notes=password_data.notes,
+            group_id=group.id
+        )
+        
+        self.db.add(password)
+        self.db.commit()
+        self.db.refresh(password)
+        return password
 
-# Health check endpoint
-@app.get("/health")
-def health_check():
-    return {"status": "healthy"}
+    async def get_password(self, password_id: int, current_user: User) -> Password:
+        """Get a password entry with decrypted password"""
+        password = self.db.query(Password).filter(Password.id == password_id).first()
+        if not password:
+            raise NotFoundError("Password not found")
+            
+        # Verify access
+        await self._verify_group_access(password.group_id, current_user)
+        
+        # Create a copy with decrypted password
+        password_copy = Password(
+            id=password.id,
+            title=password.title,
+            username=password.username,
+            encrypted_password=self.encryption.decrypt_password(password.encrypted_password),
+            url=password.url,
+            notes=password.notes,
+            group_id=password.group_id
+        )
+        
+        return password_copy
 
-# Include routers with the API prefix
-app.include_router(auth.router, prefix=settings.API_V1_STR)
-app.include_router(groups.router, prefix=settings.API_V1_STR)
-app.include_router(passwords.router, prefix=settings.API_V1_STR)
+    async def update_password(
+        self,
+        password_id: int,
+        password_data: PasswordUpdate,
+        current_user: User
+    ) -> Password:
+        """Update a password entry"""
+        password = self.db.query(Password).filter(Password.id == password_id).first()
+        if not password:
+            raise NotFoundError("Password not found")
+            
+        # Verify access
+        await self._verify_group_access(password.group_id, current_user)
+        
+        # Update fields
+        update_data = password_data.dict(exclude_unset=True)
+        if "password" in update_data:
+            update_data["encrypted_password"] = self.encryption.encrypt_password(
+                update_data.pop("password")
+            )
+            
+        for field, value in update_data.items():
+            setattr(password, field, value)
+            
+        self.db.commit()
+        self.db.refresh(password)
+        return password
 
-if __name__ == "__main__":
-    import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)
-    
-    
-    from fastapi import APIRouter, Depends, HTTPException
-from typing import Any, List
-from ..services.password_service import PasswordService
-from ..services.auth_service import AuthService
-from ..core.security import oauth2_scheme
-from ..models.schemas import Password, PasswordCreate, PasswordUpdate
-from ..models.entities import User
+    async def delete_password(self, password_id: int, current_user: User) -> None:
+        """Delete a password entry"""
+        password = self.db.query(Password).filter(Password.id == password_id).first()
+        if not password:
+            raise NotFoundError("Password not found")
+            
+        # Verify access
+        await self._verify_group_access(password.group_id, current_user)
+        
+        self.db.delete(password)
+        self.db.commit()
 
-# Remove /api/v1 from the prefix as it's already included in main.py
-router = APIRouter(prefix="/passwords", tags=["passwords"])
+    async def get_group_passwords(self, group_id: int, current_user: User) -> List[Password]:
+        """Get all passwords in a group"""
+        # Verify access
+        await self._verify_group_access(group_id, current_user)
+        
+        return self.db.query(Password).filter(Password.group_id == group_id).all()
 
-async def get_current_user(
-    auth_service: AuthService = Depends(),
-    token: str = Depends(oauth2_scheme)
-) -> User:
-    return await auth_service.get_current_user(token)
-
-@router.post("", response_model=Password)
-async def create_password(
-    password_data: PasswordCreate,
-    password_service: PasswordService = Depends(),
-    current_user: User = Depends(get_current_user)
-) -> Any:
-    """Create new password entry."""
-    try:
-        return await password_service.create_password(password_data, current_user)
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
-
-# ... rest of the router code remains the same ...
-
-
-from fastapi import APIRouter, Depends, HTTPException
-from typing import Any, List
-from ..services import GroupService
-from ..services.auth_service import AuthService
-from ..core.security import verify_access_token, oauth2_scheme
-from ..models.schemas import Group, GroupCreate, GroupUpdate, User
-from ..models.entities import User as UserModel
-
-# Remove /api/v1 from the prefix
-router = APIRouter(prefix="/groups", tags=["groups"])
-
-async def get_current_user(
-    auth_service: AuthService = Depends(),
-    token: str = Depends(oauth2_scheme)
-) -> UserModel:
-    return await auth_service.get_current_user(token)
-
-@router.post("", response_model=Group)
-async def create_group(
-    group_data: GroupCreate,
-    group_service: GroupService = Depends(),
-    current_user: UserModel = Depends(get_current_user)
-) -> Any:
-    """Create new group."""
-    try:
-        return await group_service.create_group(group_data, current_user)
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
-
-# ... rest of the router code remains the same ...
-
-
-    
-    
-    
+    async def _verify_group_access(self, group_id: int, user: User) -> Group:
+        """Verify user has access to the group"""
+        # Check if user is a member of the group using a proper query
+        group = (
+            self.db.query(Group)
+            .join(Group.members)
+            .filter(
+                Group.id == group_id,
+                User.id == user.id
+            )
+            .first()
+        )
+        
+        if not group:
+            raise PermissionDenied("You don't have access to this group")
+        
+        return group
