@@ -1,4 +1,5 @@
-from typing import Optional
+from datetime import timedelta
+from typing import Optional, Dict, Any
 from sqlalchemy.orm import Session
 from fastapi import Depends
 from ..core import security, settings
@@ -10,6 +11,17 @@ from ..db import get_db
 class AuthService:
     def __init__(self, db: Session = Depends(get_db)):
         self.db = db
+
+    def create_access_token(
+        self,
+        data: Dict[str, Any],
+        expires_delta: Optional[timedelta] = None
+    ) -> str:
+        """Create a new JWT access token"""
+        return security.create_access_token(
+            subject=data["sub"],
+            expires_delta=expires_delta or timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
+        )
 
     async def authenticate_user(self, username: str, password: str) -> Optional[User]:
         """Authenticate a user and return the user object if successful"""
