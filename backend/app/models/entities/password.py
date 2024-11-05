@@ -1,15 +1,16 @@
 from sqlalchemy import Column, Integer, String, ForeignKey, DateTime
-from sqlalchemy.sql import func
 from sqlalchemy.orm import relationship
+from sqlalchemy.sql import func
 from ...db.base_class import Base
 
 class Password(Base):
-    __tablename__ = 'passwords'  # Explicitly set table name
+    __tablename__ = "passwords"
 
     id = Column(Integer, primary_key=True, index=True)
     title = Column(String, index=True)
     username = Column(String)
     encrypted_password = Column(String)
+    encryption_key = Column(String)  # Added field for client-side encryption key
     url = Column(String, nullable=True)
     notes = Column(String, nullable=True)
     group_id = Column(Integer, ForeignKey("groups.id"))

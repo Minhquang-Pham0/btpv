@@ -21,13 +21,12 @@ class PasswordService:
         # Verify user is member of the group
         group = await self._verify_group_access(password_data.group_id, current_user)
         
-        # Encrypt the password
-        encrypted_password = self.encryption.encrypt_password(password_data.password)
-        
+        # Store the already-encrypted password and encryption key
         password = Password(
             title=password_data.title,
             username=password_data.username,
-            encrypted_password=encrypted_password,
+            encrypted_password=password_data.password,  # Already encrypted by client
+            encryption_key=password_data.encryption_key,  # Store the encryption key
             url=password_data.url,
             notes=password_data.notes,
             group_id=group.id
@@ -39,7 +38,7 @@ class PasswordService:
         return password
 
     async def get_password(self, password_id: int, current_user: User) -> Password:
-        """Get a password entry with decrypted password"""
+        """Get a password entry"""
         password = self.db.query(Password).filter(Password.id == password_id).first()
         if not password:
             raise NotFoundError("Password not found")
