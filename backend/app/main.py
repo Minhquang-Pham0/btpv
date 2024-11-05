@@ -23,7 +23,7 @@ if settings.BACKEND_CORS_ORIGINS:
 def health_check():
     return {"status": "healthy"}
 
-# Include routers with the API prefix
+# Include routers
 app.include_router(auth.router, prefix=settings.API_V1_STR)
 app.include_router(groups.router, prefix=settings.API_V1_STR)
 app.include_router(passwords.router, prefix=settings.API_V1_STR)

@@ -50,6 +50,58 @@ PYTHON_VENV="${INSTALL_DIR}/venv"
 DB_NAME="password_vault"
 DB_PASSWORD=$(generate_password)
 SECRET_KEY=$(generate_password)
+ADMIN_PASSWORD=$(generate_password)  # Generate admin password
+
+# Create admin user initialization script
+create_admin_init_script() {
+    log_info "Creating admin initialization script..."
+    cat > "${INSTALL_DIR}/create_admin.py" << EOF
+from app.db.session import SessionLocal
+from app.services.auth_service import AuthService
+from app.models.schemas import UserCreate
+
+def create_admin():
+    db = SessionLocal()
+    try:
+        auth_service = AuthService(db)
+        user_data = UserCreate(
+            username="admin",
+            email="admin@saoc.snc",
+            password="${ADMIN_PASSWORD}"
+        )
+        auth_service.create_user(user_data)
+        print("Admin user created successfully")
+    except Exception as e:
+        print(f"Error creating admin user: {str(e)}")
+    finally:
+        db.close()
+
+if __name__ == "__main__":
+    create_admin()
+EOF
+
+    # Make the script executable
+    chmod +x "${INSTALL_DIR}/create_admin.py"
+}
+
+# Initialize admin user
+init_admin_user() {
+    log_info "Initializing admin user..."
+    source "${PYTHON_VENV}/bin/activate"
+    export PYTHONPATH="${INSTALL_DIR}"
+    python "${INSTALL_DIR}/create_admin.py"
+
+    # Save admin credentials securely
+    cat > "${CONFIG_DIR}/admin_credentials.txt" << EOF
+Admin Username: admin
+Admin Email: admin@saoc.snc
+Admin Password: ${ADMIN_PASSWORD}
+EOF
+    
+    # Secure the credentials file
+    chmod 600 "${CONFIG_DIR}/admin_credentials.txt"
+    chown "${SERVICE_USER}:${SERVICE_GROUP}" "${CONFIG_DIR}/admin_credentials.txt"
+}
 
 # Create required directories
 create_directories() {
@@ -349,9 +401,11 @@ main() {
     install_system_deps
     install_python_deps
     setup_database
+    create_admin_init_script
     create_config_files
     init_database
     setup_systemd
+    init_admin_user
     set_permissions
     
     log_info "Installation completed successfully!"
