@@ -1,75 +1,112 @@
-from datetime import timedelta
+from fastapi import APIRouter, Depends, HTTPException
+from typing import Any
+from fastapi.security import OAuth2PasswordRequestForm
+from ...core.exceptions import AuthenticationError
+from ...services.auth_service import AuthService
+from ...models.schemas.user import UserCreate, User
+from ...models.schemas.token import Token
+
+router = APIRouter(prefix="/auth", tags=["auth"])
+
+@router.post("/register", response_model=User)
+async def register_user(
+    user_data: UserCreate,
+    auth_service: AuthService = Depends()
+) -> Any:
+    """Register a new user."""
+    try:
+        return await auth_service.create_user(user_data)
+    except Exception as e:
+        raise HTTPException(
+            status_code=400,
+            detail=str(e)
+        )
+
+@router.post("/login", response_model=Token)
+async def login(
+    form_data: OAuth2PasswordRequestForm = Depends(),
+    auth_service: AuthService = Depends()
+) -> Any:
+    """OAuth2 compatible token login."""
+    try:
+        user = await auth_service.authenticate_user(
+            form_data.username,
+            form_data.password
+        )
+        return auth_service.create_access_token({"sub": user.username})
+    except AuthenticationError as e:
+        raise HTTPException(
+            status_code=401,
+            detail=str(e),
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+@router.post("/test-token", response_model=User)
+async def test_token(
+    current_user: User = Depends(AuthService.get_current_user)
+) -> Any:
+    """Test access token."""
+    return current_user
+    
+    
+    from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+from .core.config import settings
+from .api.routes import auth, groups, passwords
+
+app = FastAPI(
+    title=settings.PROJECT_NAME,
+    openapi_url=f"{settings.API_V1_STR}/openapi.json"
+)
+
+# Set up CORS
+if settings.BACKEND_CORS_ORIGINS:
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=[str(origin) for origin in settings.BACKEND_CORS_ORIGINS],
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
+
+# Health check endpoint
+@app.get("/health")
+def health_check():
+    return {"status": "healthy"}
+
+# Include routers
+app.include_router(auth.router, prefix=settings.API_V1_STR)
+app.include_router(groups.router, prefix=settings.API_V1_STR)
+app.include_router(passwords.router, prefix=settings.API_V1_STR)
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=8000)
+    
+    
+    from pydantic import BaseModel, EmailStr
 from typing import Optional
-from sqlalchemy.orm import Session
-from fastapi import Depends
-from ..core import security, settings
-from ..models.entities import User
-from ..models.schemas import UserCreate, Token
-from ..core.exceptions import AuthenticationError, DuplicateError
-from ..db import get_db
-from .encryption_service import EncryptionService
 
-class AuthService:
-    def __init__(
-        self,
-        db: Session = Depends(get_db),
-        encryption: EncryptionService = Depends()
-    ):
-        self.db = db
-        self.encryption = encryption
+class UserBase(BaseModel):
+    username: str
+    email: EmailStr
 
-    def create_access_token(self, subject: str) -> Token:
-        expires_delta = timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
-        token = security.create_access_token(
-            subject=subject,
-            expires_delta=expires_delta
-        )
-        return Token(access_token=token, token_type="bearer")
+class UserCreate(UserBase):
+    password: str
 
-    async def authenticate_user(self, username: str, password: str) -> Optional[User]:
-        """Authenticate a user and return the user object if successful"""
-        user = self.db.query(User).filter(User.username == username).first()
-        if not user:
-            raise AuthenticationError("Invalid username or password")
+class UserUpdate(BaseModel):
+    username: Optional[str] = None
+    email: Optional[EmailStr] = None
+    password: Optional[str] = None
 
-        if not security.verify_password(password, user.hashed_password):
-            raise AuthenticationError("Invalid username or password")
+class User(UserBase):
+    id: int
+    is_active: bool
+    
+    class Config:
+        from_attributes = True
 
-        return user
-
-    async def create_user(self, user_data: UserCreate) -> User:
-        """Create a new user with encrypted password"""
-        # Check if user already exists
-        if self.db.query(User).filter(User.username == user_data.username).first():
-            raise DuplicateError("Username already registered")
-        
-        if self.db.query(User).filter(User.email == user_data.email).first():
-            raise DuplicateError("Email already registered")
-
-        # Hash the password using bcrypt (for user authentication)
-        hashed_password = security.get_password_hash(user_data.password)
-
-        # Create new user
-        user = User(
-            username=user_data.username,
-            email=user_data.email,
-            hashed_password=hashed_password,
-            is_active=True
-        )
-
-        self.db.add(user)
-        self.db.commit()
-        self.db.refresh(user)
-        return user
-
-    async def get_current_user(self, token: str) -> User:
-        """Get the current user from a JWT token"""
-        username = security.verify_access_token(token)
-        if not username:
-            raise AuthenticationError()
-            
-        user = self.db.query(User).filter(User.username == username).first()
-        if not user:
-            raise AuthenticationError()
-            
-        return user
+class UserInDB(User):
+    hashed_password: str
+    
+    
