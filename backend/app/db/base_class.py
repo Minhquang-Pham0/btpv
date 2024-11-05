@@ -1,12 +1,9 @@
-from typing import Any
-from sqlalchemy.ext.declarative import declared_attr
-from sqlalchemy.orm import DeclarativeBase
+from sqlalchemy import create_engine
+from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy.orm import sessionmaker
+from ..core.config import settings
 
-class Base(DeclarativeBase):
-    id: Any
-    __name__: str
-
-    # Generate tablename automatically
-    @declared_attr
-    def __tablename__(cls) -> str:
-        return cls.__name__.lower()
+# Core SQLAlchemy setup
+engine = create_engine(str(settings.SQLALCHEMY_DATABASE_URI))
+SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+Base = declarative_base()
