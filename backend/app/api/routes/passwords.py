@@ -1,12 +1,16 @@
 from fastapi import APIRouter, Depends, HTTPException
-from typing import Any, List
+from typing import Any, List, Dict
 from app.services import PasswordService, AuthService, EncryptionService
 from app.models.schemas import Password, PasswordCreate, PasswordUpdate, User
 from app.core.security import oauth2_scheme
 from app.models.entities import User, Group
 from app.core.exceptions import NotFoundError, PermissionDenied
+from pydantic import BaseModel
 
 router = APIRouter(prefix="/passwords", tags=["passwords"])
+
+class GeneratePasswordRequest(BaseModel):
+    length: int = 16
 
 async def get_current_user(
     auth_service: AuthService = Depends(),
@@ -82,11 +86,11 @@ async def delete_password(
     """Delete a password entry."""
     return await password_service.delete_password(password_id, current_user)
 
-@router.post("/generate")
+@router.get("/generate", response_model=Dict[str, str])  # Changed to GET
 async def generate_password(
-    length: int = 16,
-    encryption_service: EncryptionService = Depends()
-) -> Any:
+    encryption_service: EncryptionService = Depends(),
+    current_user: User = Depends(AuthService.get_current_user)
+) -> Dict[str, str]:
     """Generate a random secure password."""
-    return {"password": encryption_service.generate_password(length)}
-
+    password = encryption_service.generate_password()  # Use default length
+    return {"password": password}
