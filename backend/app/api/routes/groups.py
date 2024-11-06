@@ -1,10 +1,11 @@
+# app/api/routes/groups.py
 from fastapi import APIRouter, Depends, HTTPException
 from typing import Any, List
-from app.services import GroupService
-from app.services.auth_service import AuthService
-from app.core.security import verify_access_token, oauth2_scheme
-from app.models.schemas import Group, GroupCreate, GroupUpdate, User
-from app.models.entities import User as UserModel
+from ...services import GroupService
+from ...services.auth_service import AuthService
+from ...core.security import verify_access_token, oauth2_scheme
+from ...models.schemas import Group, GroupCreate, GroupUpdate, User
+from ...models.entities import User as UserModel
 
 router = APIRouter(prefix="/groups", tags=["groups"])
 

@@ -1,10 +1,10 @@
+# app/api/routes/auth.py
 from fastapi import APIRouter, Depends, HTTPException
-from typing import Any
 from fastapi.security import OAuth2PasswordRequestForm
+from typing import Any
 from ...core.exceptions import AuthenticationError
-from ...services.auth_service import AuthService
-from ...models.schemas.user import UserCreate, User
-from ...models.schemas.token import Token
+from ...services import AuthService
+from ...models.schemas import Token, UserCreate, User
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -14,13 +14,7 @@ async def register_user(
     auth_service: AuthService = Depends()
 ) -> Any:
     """Register a new user."""
-    try:
-        return await auth_service.create_user(user_data)
-    except Exception as e:
-        raise HTTPException(
-            status_code=400,
-            detail=str(e)
-        )
+    return await auth_service.create_user(user_data)
 
 @router.post("/login", response_model=Token)
 async def login(
@@ -29,21 +23,12 @@ async def login(
 ) -> Any:
     """OAuth2 compatible token login."""
     try:
-        user = await auth_service.authenticate_user(
-            form_data.username,
-            form_data.password
-        )
-        return auth_service.create_access_token({"sub": user.username})
+        user = await auth_service.authenticate_user(form_data.username, form_data.password)
+        token = auth_service.create_access_token(subject=user.username)
+        return token
     except AuthenticationError as e:
         raise HTTPException(
             status_code=401,
             detail=str(e),
             headers={"WWW-Authenticate": "Bearer"},
         )
-
-@router.post("/test-token", response_model=User)
-async def test_token(
-    current_user: User = Depends(AuthService.get_current_user)
-) -> Any:
-    """Test access token."""
-    return current_user
