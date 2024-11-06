@@ -52,7 +52,6 @@ DB_PASSWORD=$(generate_password)
 SECRET_KEY=$(generate_password)
 ADMIN_PASSWORD=$(generate_password)  # Generate admin password
 
-# Create admin user initialization script
 create_admin_init_script() {
     log_info "Creating admin initialization script..."
     cat > "${INSTALL_DIR}/create_admin.py" << EOF
@@ -69,12 +68,13 @@ def create_admin(db: Session):
             print("Admin user already exists")
             return
 
-        # Create new admin user
+        # Create new admin user with is_admin=True
         admin_user = User(
             username="admin",
             email="admin@saoc.snc",
             hashed_password=get_password_hash("${ADMIN_PASSWORD}"),
-            is_active=True
+            is_active=True,
+            is_admin=True  # Set admin privileges
         )
         
         db.add(admin_user)

@@ -1,14 +1,12 @@
 # app/db/session.py
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
-from ..core.config import settings
+from typing import Generator
+from sqlalchemy.orm import Session
+from .base_class import SessionLocal
 
-engine = create_engine(str(settings.SQLALCHEMY_DATABASE_URI))
-SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
-
-def get_db():
-    db = SessionLocal()
+def get_db() -> Generator[Session, None, None]:
+    """Database session dependency"""
     try:
+        db = SessionLocal()
         yield db
     finally:
         db.close()

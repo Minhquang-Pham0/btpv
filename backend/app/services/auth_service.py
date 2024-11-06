@@ -1,4 +1,5 @@
-from datetime import timedelta
+# app/services/auth_service.py
+from datetime import datetime, timedelta
 from typing import Optional
 from sqlalchemy.orm import Session
 from fastapi import Depends, HTTPException, status
@@ -8,19 +9,13 @@ from ..models.entities import User
 from ..models.schemas import UserCreate, Token
 from ..core.exceptions import AuthenticationError, DuplicateError
 from ..db import get_db
-from .encryption_service import EncryptionService
+from ..core.security import verify_access_token
 
-# Configure OAuth2
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl=f"{settings.API_V1_STR}/auth/login")
 
 class AuthService:
-    def __init__(
-        self,
-        db: Session = Depends(get_db),
-        encryption: EncryptionService = Depends()
-    ):
+    def __init__(self, db: Session = Depends(get_db)):
         self.db = db
-        self.encryption = encryption
 
     def create_access_token(self, subject: str) -> Token:
         """Create access token for given subject"""
@@ -30,6 +25,22 @@ class AuthService:
             expires_delta=expires_delta
         )
         return Token(access_token=token, token_type="bearer")
+
+    async def get_current_user(self, token: str) -> User:
+        """Get the current user from a JWT token"""
+        try:
+            username = verify_access_token(token)
+            if not username:
+                raise AuthenticationError("Invalid token")
+
+            user = self.db.query(User).filter(User.username == username).first()
+            if not user:
+                raise AuthenticationError("User not found")
+
+            return user
+        except Exception as e:
+            raise AuthenticationError(str(e))
+
 
     async def authenticate_user(self, username: str, password: str) -> Optional[User]:
         """Authenticate a user and return the user object if successful"""
@@ -66,29 +77,3 @@ class AuthService:
         self.db.commit()
         self.db.refresh(user)
         return user
-
-    async def get_current_user(self, token: str = Depends(oauth2_scheme)) -> User:
-        """Get the current user from a JWT token"""
-        credentials_exception = HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Could not validate credentials",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
-        
-        try:
-            # Extract the raw token from the Bearer token
-            if token.startswith('Bearer '):
-                token = token[7:]
-                
-            username = security.verify_access_token(token)
-            if not username:
-                raise credentials_exception
-                
-            user = self.db.query(User).filter(User.username == username).first()
-            if not user:
-                raise credentials_exception
-                
-            return user
-            
-        except Exception as e:
-            raise credentials_exception

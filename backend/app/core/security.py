@@ -36,17 +36,23 @@ def create_access_token(subject: str, expires_delta: Optional[timedelta] = None)
 def verify_access_token(token: str) -> Optional[str]:
     """Verify a JWT token and return the username"""
     try:
+        if token.startswith('Bearer '):
+            token = token[7:]
+
         payload = jwt.decode(
             token,
             settings.SECRET_KEY,
             algorithms=[settings.ALGORITHM]
         )
+        
         username: str = payload.get("sub")
-        if username is None or not isinstance(username, str):
+        if username is None:
             return None
+            
         return username
     except JWTError:
         return None
+
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
     """Verify a password against its hash"""
