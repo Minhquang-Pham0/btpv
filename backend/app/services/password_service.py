@@ -27,7 +27,7 @@ class PasswordService:
             username=password_data.username,
             encrypted_password=password_data.password,  # Already encrypted by client
             encryption_key=password_data.encryption_key,  # Store the encryption key
-            url=password_data.url,
+            url=str(password_data.url) if password_data.url else None,
             notes=password_data.notes,
             group_id=group.id
         )
