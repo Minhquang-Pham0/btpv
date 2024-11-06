@@ -56,40 +56,76 @@ ADMIN_PASSWORD=$(generate_password)  # Generate admin password
 create_admin_init_script() {
     log_info "Creating admin initialization script..."
     cat > "${INSTALL_DIR}/create_admin.py" << EOF
+import asyncio
+from sqlalchemy.orm import Session
 from app.db.session import SessionLocal
-from app.services.auth_service import AuthService
-from app.models.schemas import UserCreate
+from app.models.entities import User
+from app.core.security import get_password_hash
 
-def create_admin():
-    db = SessionLocal()
+def create_admin(db: Session):
     try:
-        auth_service = AuthService(db)
-        user_data = UserCreate(
+        # Check if admin already exists
+        if db.query(User).filter(User.username == "admin").first():
+            print("Admin user already exists")
+            return
+
+        # Create new admin user
+        admin_user = User(
             username="admin",
             email="admin@saoc.snc",
-            password="${ADMIN_PASSWORD}"
+            hashed_password=get_password_hash("${ADMIN_PASSWORD}"),
+            is_active=True
         )
-        auth_service.create_user(user_data)
+        
+        db.add(admin_user)
+        db.commit()
+        db.refresh(admin_user)
         print("Admin user created successfully")
+        
     except Exception as e:
+        db.rollback()
         print(f"Error creating admin user: {str(e)}")
+        raise
+
+def main():
+    db = SessionLocal()
+    try:
+        create_admin(db)
     finally:
         db.close()
 
 if __name__ == "__main__":
-    create_admin()
+    main()
 EOF
 
-    # Make the script executable
     chmod +x "${INSTALL_DIR}/create_admin.py"
 }
 
 # Initialize admin user
 init_admin_user() {
     log_info "Initializing admin user..."
+    
+    # Ensure the virtual environment is activated
     source "${PYTHON_VENV}/bin/activate"
+    
+    # Set up environment variables
     export PYTHONPATH="${INSTALL_DIR}"
-    python "${INSTALL_DIR}/create_admin.py"
+    export POSTGRES_SERVER=localhost
+    export POSTGRES_USER="${SERVICE_USER}"
+    export POSTGRES_PASSWORD="${DB_PASSWORD}"
+    export POSTGRES_DB="${DB_NAME}"
+    
+    # Run the admin creation script
+    cd "${INSTALL_DIR}"
+    python create_admin.py
+    
+    # Check if the admin user was created successfully
+    if PGPASSWORD="${DB_PASSWORD}" psql -U "${SERVICE_USER}" -h localhost -d "${DB_NAME}" -c "SELECT username FROM users WHERE username = 'admin';" | grep -q "admin"; then
+        log_info "Admin user created successfully"
+    else
+        log_error "Failed to create admin user"
+        exit 1
+    fi
 
     # Save admin credentials securely
     cat > "${CONFIG_DIR}/admin_credentials.txt" << EOF
@@ -101,8 +137,9 @@ EOF
     # Secure the credentials file
     chmod 600 "${CONFIG_DIR}/admin_credentials.txt"
     chown "${SERVICE_USER}:${SERVICE_GROUP}" "${CONFIG_DIR}/admin_credentials.txt"
+    
+    log_info "Admin credentials saved to: ${CONFIG_DIR}/admin_credentials.txt"
 }
-
 # Create required directories
 create_directories() {
     log_info "Creating directory structure..."
@@ -401,16 +438,22 @@ main() {
     install_system_deps
     install_python_deps
     setup_database
-    create_admin_init_script
     create_config_files
-    init_database
+    init_database         # First initialize the database
+    create_admin_init_script  # Then create the admin script
+    init_admin_user      # Finally create the admin user
     setup_systemd
-    init_admin_user
     set_permissions
     
     log_info "Installation completed successfully!"
-    log_info "Credentials have been saved to: ${CONFIG_DIR}/.env"
+    log_info "Service credentials saved to: ${CONFIG_DIR}/.env"
+    log_info "Admin credentials saved to: ${CONFIG_DIR}/admin_credentials.txt"
     log_info "Start the service with: systemctl start password-vault"
+    
+    # Display the admin credentials
+    log_info "Admin Credentials:"
+    log_info "Username: admin"
+    log_info "Password: ${ADMIN_PASSWORD}"
 }
 
 # Run main installation
