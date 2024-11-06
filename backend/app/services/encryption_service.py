@@ -27,35 +27,3 @@ class EncryptionService:
         except Exception as e:
             raise RuntimeError(f"Password decryption failed: {str(e)}")
     
-    @staticmethod
-    def generate_password(length: int = 16) -> str:
-        """Generate a secure random password"""
-        if length < 8:
-            length = 8  # Minimum length for security
-        elif length > 128:
-            length = 128  # Maximum reasonable length
-            
-        # Define character sets
-        lowercase = string.ascii_lowercase
-        uppercase = string.ascii_uppercase
-        digits = string.digits
-        special = "!@#$%^&*"
-        
-        # Ensure at least one character from each set
-        password = [
-            secrets.choice(lowercase),
-            secrets.choice(uppercase),
-            secrets.choice(digits),
-            secrets.choice(special)
-        ]
-        
-        # Fill the rest with random characters from all sets
-        all_chars = lowercase + uppercase + digits + special
-        for _ in range(length - 4):
-            password.append(secrets.choice(all_chars))
-            
-        # Shuffle the password
-        password_list = list(password)
-        secrets.SystemRandom().shuffle(password_list)
-        
-        return ''.join(password_list)

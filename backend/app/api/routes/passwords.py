@@ -9,9 +9,6 @@ from pydantic import BaseModel
 
 router = APIRouter(prefix="/passwords", tags=["passwords"])
 
-class GeneratePasswordRequest(BaseModel):
-    length: int = 16
-
 async def get_current_user(
     auth_service: AuthService = Depends(),
     token: str = Depends(oauth2_scheme)
@@ -85,12 +82,3 @@ async def delete_password(
 ) -> Any:
     """Delete a password entry."""
     return await password_service.delete_password(password_id, current_user)
-
-@router.get("/generate", response_model=Dict[str, str])  # Changed to GET
-async def generate_password(
-    encryption_service: EncryptionService = Depends(),
-    current_user: User = Depends(AuthService.get_current_user)
-) -> Dict[str, str]:
-    """Generate a random secure password."""
-    password = encryption_service.generate_password()  # Use default length
-    return {"password": password}
