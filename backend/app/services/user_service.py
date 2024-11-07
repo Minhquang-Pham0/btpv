@@ -13,21 +13,15 @@ class UserService:
         """Initialize UserService with database session"""
         self.db = db
 
+    async def get_users(self, current_user: User) -> List[User]:
+        """Get all users (admin only)"""
+        if not current_user.is_admin:
+            raise PermissionDenied("Only administrators can view user list")
+            
+        return self.db.query(User).all()
+
     async def create_user(self, user_data: UserCreate, current_user: User) -> User:
-        """
-        Create a new user (admin only)
-        
-        Args:
-            user_data: User creation data
-            current_user: Currently authenticated user
-            
-        Returns:
-            Created user instance
-            
-        Raises:
-            PermissionDenied: If current user is not admin
-            DuplicateError: If username or email already exists
-        """
+        """Create a new user (admin only)"""
         if not current_user.is_admin:
             raise PermissionDenied("Only administrators can create users")
 
@@ -50,24 +44,6 @@ class UserService:
         self.db.commit()
         self.db.refresh(user)
         return user
-
-    async def get_users(self, current_user: User) -> List[User]:
-        """
-        Get all users (admin only)
-        
-        Args:
-            current_user: Currently authenticated user
-            
-        Returns:
-            List of all users
-            
-        Raises:
-            PermissionDenied: If current user is not admin
-        """
-        if not current_user.is_admin:
-            raise PermissionDenied("Only administrators can view user list")
-            
-        return self.db.query(User).all()
 
     async def get_user(self, user_id: int, current_user: User) -> User:
         """

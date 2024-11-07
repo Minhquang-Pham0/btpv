@@ -38,22 +38,23 @@ async def get_current_user(
         )
 
 
+@router.get("", response_model=List[User])
+async def get_users(
+    current_user: User = Depends(AuthService.get_current_user),
+    user_service: UserService = Depends()
+):
+    """Get all users (admin only)"""
+    return await user_service.get_users(current_user)
+
 @router.post("", response_model=User)
 async def create_user(
     user_data: UserCreate,
-    user_service: UserService = Depends(),
-    current_user: User = Depends(AuthService.get_current_user)
+    current_user: User = Depends(AuthService.get_current_user),
+    user_service: UserService = Depends()
 ):
     """Create new user (admin only)"""
     return await user_service.create_user(user_data, current_user)
 
-@router.get("", response_model=List[User])
-async def get_users(
-    user_service: UserService = Depends(),
-    current_user: User = Depends(AuthService.get_current_user)
-):
-    """Get all users (admin only)"""
-    return await user_service.get_users(current_user)
 
 @router.get("/{user_id}", response_model=User)
 async def get_user(
