@@ -77,3 +77,13 @@ class AuthService:
         self.db.commit()
         self.db.refresh(user)
         return user
+
+    @classmethod
+    def get_current_user_dependency(cls):
+        async def get_current_user(
+            token: str = Depends(oauth2_scheme),
+            db: Session = Depends(get_db)
+        ) -> User:
+            auth_service = cls(db)
+            return await auth_service.get_current_user(token)
+        return get_current_user
