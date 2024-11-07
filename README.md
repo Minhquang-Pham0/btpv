@@ -93,9 +93,9 @@ npm start
 5. 🔴 Configure SELinux policies
 
 ### High Priority (Core Features)
-1. 🟡 Add password generator
-2. 🟡 Implement password visibility toggle
-3. 🟡 Add copy to clipboard functionality
+1. 🟡 Add password generator - done
+2. 🟡 Implement password visibility toggle - done
+3. 🟡 Add copy to clipboard functionality - done
 4. 🟡 Create backup/restore procedures
 5. 🟡 Add password search functionality
 

@@ -166,15 +166,20 @@ create_service_user() {
 install_system_deps() {
     log_info "Installing system dependencies..."
     
-    # Enable CodeReady repository for additional packages
-    subscription-manager repos --enable codeready-builder-for-rhel-9-$(arch)-rpms || true
-    
-    # Enable EPEL
-    dnf install -y https://dl.fedoraproject.org/pub/epel/epel-release-latest-9.noarch.rpm || true
-    
-    # Install development tools and dependencies
+    dnf config-manager --set-enabled powertools
+    dnf install -y epel-release
     dnf group install -y "Development Tools"
-    dnf install -y python3-devel python3-pip postgresql-server postgresql-contrib postgresql-devel gcc openssl-devel libffi-devel
+    
+    dnf module enable -y python39
+    dnf install -y python39 python39-devel
+    
+    # Install PostgreSQL 13 from official repository
+    dnf install -y https://download.postgresql.org/pub/repos/yum/reporpms/EL-8-x86_64/pgdg-redhat-repo-latest.noarch.rpm
+    dnf -qy module disable postgresql
+    dnf install -y postgresql13-server postgresql13-contrib postgresql13-devel
+    
+    # Additional required dependencies
+    dnf install -y openssl-devel libffi-devel
 }
 
 # Install Python dependencies
@@ -188,13 +193,13 @@ install_python_deps() {
 setup_database() {
     log_info "Setting up PostgreSQL..."
     
-    # Initialize PostgreSQL if not already initialized
-    if [ ! -f /var/lib/pgsql/data/postgresql.conf ]; then
-        postgresql-setup --initdb
+    # Initialize PostgreSQL 13 if not already initialized
+    if [ ! -f /var/lib/pgsql/13/data/postgresql.conf ]; then
+        /usr/pgsql-13/bin/postgresql-13-setup initdb
     fi
 
     # Configure pg_hba.conf for local connections
-    cat > /var/lib/pgsql/data/pg_hba.conf << EOF
+    cat > /var/lib/pgsql/13/data/pg_hba.conf << EOF
 # TYPE  DATABASE        USER            ADDRESS                 METHOD
 local   all            postgres                                peer
 local   all            all                                     md5
@@ -203,7 +208,7 @@ host    all            all             ::1/128                 md5
 EOF
 
     # Configure postgresql.conf
-    cat > /var/lib/pgsql/data/postgresql.conf << EOF
+    cat > /var/lib/pgsql/13/data/postgresql.conf << EOF
 listen_addresses = 'localhost'
 port = 5432
 max_connections = 100
@@ -222,13 +227,13 @@ default_text_search_config = 'pg_catalog.english'
 EOF
 
     # Restart PostgreSQL to apply configuration
-    systemctl restart postgresql
-    systemctl enable postgresql
+    systemctl enable postgresql-13
+    systemctl start postgresql-13
     
     # Wait for PostgreSQL to be ready
     log_info "Waiting for PostgreSQL to start..."
     for i in {1..30}; do
-        if sudo -u postgres psql -c '\l' >/dev/null 2>&1; then
+        if su - postgres -c "/usr/pgsql-13/bin/psql -c '\l'" >/dev/null 2>&1; then
             break
         fi
         sleep 1
