@@ -2,6 +2,8 @@
 from typing import List, Optional
 from sqlalchemy.orm import Session
 from fastapi import Depends
+
+from ..models.entities.group import Group
 from ..core.security import get_password_hash, verify_password
 from ..models.entities import User
 from ..models.schemas import UserCreate, UserUpdate
@@ -173,3 +175,21 @@ class UserService:
             
         self.db.delete(user)
         self.db.commit()
+
+
+    async def get_available_users(self, group_id: int, current_user: User) -> List[User]:
+        """Get users that can be added to the group"""
+        # Get the group
+        group = self.db.query(Group).filter(Group.id == group_id).first()
+        if not group:
+            raise NotFoundError("Group not found")
+            
+        # Check if current user is the group owner
+        if group.owner_id != current_user.id:
+            raise PermissionDenied("Only group owner can view available users")
+            
+        # Get users not in the group
+        return self.db.query(User)\
+            .filter(~User.member_of_groups.any(Group.id == group_id))\
+            .filter(User.is_active == True)\
+            .all()

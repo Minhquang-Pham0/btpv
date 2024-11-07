@@ -1,19 +1,49 @@
 # app/api/routes/groups.py
 from fastapi import APIRouter, Depends, HTTPException
 from typing import Any, List
+
+from ...services.user_service import UserService
 from ...services import GroupService
 from ...services.auth_service import AuthService
 from ...core.security import verify_access_token, oauth2_scheme
 from ...models.schemas import Group, GroupCreate, GroupUpdate, User
 from ...models.entities import User as UserModel
+from ...db.session import get_db
+from sqlalchemy.orm import Session
 
 router = APIRouter(prefix="/groups", tags=["groups"])
 
+# Define get_current_user dependency
 async def get_current_user(
-    auth_service: AuthService = Depends(),
+    db: Session = Depends(get_db),
     token: str = Depends(oauth2_scheme)
-) -> UserModel:
+) -> User:
+    auth_service = AuthService(db)
     return await auth_service.get_current_user(token)
+
+@router.post("/{group_id}/members/{username}", response_model=Group)
+async def add_group_member(
+    *,  # Force keyword arguments
+    group_id: int,
+    username: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Add a member to the group"""
+    group_service = GroupService(db)
+    return await group_service.add_member(group_id, username, current_user)
+
+@router.delete("/{group_id}/members/{username}", response_model=Group)
+async def remove_group_member(
+    *,  # Force keyword arguments
+    group_id: int,
+    username: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Remove a member from the group"""
+    group_service = GroupService(db)
+    return await group_service.remove_member(group_id, username, current_user)
 
 @router.post("", response_model=Group)
 async def create_group(
@@ -63,28 +93,12 @@ async def update_group(
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
-@router.post("/{group_id}/members/{username}")
-async def add_group_member(
-    group_id: int,
-    username: str,
-    group_service: GroupService = Depends(),
-    current_user: UserModel = Depends(get_current_user)
-) -> Any:
-    """Add a member to the group."""
-    try:
-        return await group_service.add_member(group_id, username, current_user)
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
 
-@router.delete("/{group_id}/members/{username}")
-async def remove_group_member(
+@router.get("/{group_id}/available-users", response_model=List[User])
+async def get_available_users(
     group_id: int,
-    username: str,
-    group_service: GroupService = Depends(),
-    current_user: UserModel = Depends(get_current_user)
-) -> Any:
-    """Remove a member from the group."""
-    try:
-        return await group_service.remove_member(group_id, username, current_user)
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
+    user_service: UserService = Depends(),
+    current_user: User = Depends(get_current_user)
+):
+    """Get users that can be added to the group"""
+    return await user_service.get_available_users(group_id, current_user)

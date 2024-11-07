@@ -33,42 +33,63 @@ class GroupService:
             raise PermissionDenied("You are not a member of this group")
         return group
 
-    async def add_member(self, group_id: int, username: str, current_user: User) -> Group:
+    async def add_member(
+        self,
+        group_id: int,
+        username: str,
+        current_user: User
+    ) -> Group:
         """Add a member to a group"""
+        # Find the group
         group = self.db.query(Group).filter(Group.id == group_id).first()
         if not group:
             raise NotFoundError("Group not found")
+
+        # Check permissions
         if group.owner_id != current_user.id:
             raise PermissionDenied("Only the group owner can add members")
 
-        user = self.db.query(User).filter(User.username == username).first()
-        if not user:
-            raise NotFoundError("User not found")
+        # Find the user to add
+        user_to_add = self.db.query(User).filter(User.username == username).first()
+        if not user_to_add:
+            raise NotFoundError(f"User {username} not found")
 
-        if user not in group.members:
-            group.members.append(user)
+        # Add the user to the group if they're not already a member
+        if user_to_add not in group.members:
+            group.members.append(user_to_add)
             self.db.commit()
             self.db.refresh(group)
 
         return group
 
-    async def remove_member(self, group_id: int, username: str, current_user: User) -> Group:
+    async def remove_member(
+        self, 
+        group_id: int, 
+        username: str, 
+        current_user: User
+    ) -> Group:
         """Remove a member from a group"""
+        # Find the group
         group = self.db.query(Group).filter(Group.id == group_id).first()
         if not group:
             raise NotFoundError("Group not found")
+
+        # Check permissions
         if group.owner_id != current_user.id:
             raise PermissionDenied("Only the group owner can remove members")
 
-        user = self.db.query(User).filter(User.username == username).first()
-        if not user:
-            raise NotFoundError("User not found")
+        # Find the user to remove
+        user_to_remove = self.db.query(User).filter(User.username == username).first()
+        if not user_to_remove:
+            raise NotFoundError(f"User {username} not found")
 
-        if user == current_user:
+        # Can't remove the owner
+        if user_to_remove.id == group.owner_id:
             raise PermissionDenied("Cannot remove the group owner")
 
-        if user in group.members:
-            group.members.remove(user)
+        # Remove the user from the group
+        if user_to_remove in group.members:
+            group.members.remove(user_to_remove)
             self.db.commit()
             self.db.refresh(group)
 

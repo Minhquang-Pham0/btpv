@@ -3,7 +3,7 @@ from sqlalchemy.orm import relationship
 from ...db.base_class import Base
 
 class Group(Base):
-    __tablename__ = 'groups'  # Explicitly set table name
+    __tablename__ = "groups"
 
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String, index=True)
@@ -11,7 +11,7 @@ class Group(Base):
     owner_id = Column(Integer, ForeignKey("users.id"))
     
     # Relationships
-    owner = relationship("User", back_populates="owned_groups")
+    owner = relationship("User", foreign_keys=[owner_id], back_populates="owned_groups")
     members = relationship(
         "User",
         secondary="group_members",
