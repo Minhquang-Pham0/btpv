@@ -165,18 +165,23 @@ create_service_user() {
 # Install system dependencies
 install_system_deps() {
     log_info "Installing system dependencies..."
-    
-    dnf config-manager --set-enabled powertools
-    dnf install -y epel-release
+
+    dnf config-manager --set-enabled codeready-builder-for-rhel-8-x86_64-rpms
+    # subscription-manager repos --enable=codeready-builder-for-rhel-8-x86_64-rpms
+
+    # dnf install -y epel-release
+    sudo dnf install -y https://dl.fedoraproject.org/pub/epel/epel-release-latest-8.noarch.rpm
     dnf group install -y "Development Tools"
     
     dnf module enable -y python39
     dnf install -y python39 python39-devel
     
+
     # Install PostgreSQL 13 from official repository
     dnf install -y https://download.postgresql.org/pub/repos/yum/reporpms/EL-8-x86_64/pgdg-redhat-repo-latest.noarch.rpm
     dnf -qy module disable postgresql
     dnf install -y postgresql13-server postgresql13-contrib postgresql13-devel
+    sudo dnf install postgresql-devel
     
     # Additional required dependencies
     dnf install -y openssl-devel libffi-devel
@@ -185,6 +190,7 @@ install_system_deps() {
 # Install Python dependencies
 install_python_deps() {
     log_info "Installing Python dependencies..."
+    sudo alternatives --set python3 /usr/bin/python3.9
     python3 -m venv "${PYTHON_VENV}"
     source "${PYTHON_VENV}/bin/activate"
     pip install --upgrade pip
