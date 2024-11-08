@@ -102,3 +102,15 @@ async def get_available_users(
 ):
     """Get users that can be added to the group"""
     return await user_service.get_available_users(group_id, current_user)
+
+@router.delete("/{group_id}")
+async def delete_group(
+    *,
+    group_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+) -> Any:
+    """Delete a group (owner only)."""
+    group_service = GroupService(db)
+    await group_service.delete_group(group_id, current_user)
+    return {"message": "Group deleted successfully"}

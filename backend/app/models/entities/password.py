@@ -10,7 +10,7 @@ class Password(Base):
     title = Column(String, index=True)
     username = Column(String)
     encrypted_password = Column(String)
-    encryption_key = Column(String)  # Added field for client-side encryption key
+    encryption_key = Column(String)  
     url = Column(String, nullable=True)
     notes = Column(String, nullable=True)
     group_id = Column(Integer, ForeignKey("groups.id"))

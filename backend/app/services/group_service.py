@@ -1,7 +1,7 @@
 from typing import List
 from sqlalchemy.orm import Session
 from fastapi import Depends
-from ..models.entities import Group, User
+from ..models.entities import Group, User, Password
 from ..models.schemas import GroupCreate, GroupUpdate
 from ..core.exceptions import NotFoundError, PermissionDenied
 from ..db import get_db
@@ -114,4 +114,25 @@ class GroupService:
 
         self.db.commit()
         self.db.refresh(group)
-        return group
+        return group    
+    
+
+    async def delete_group(self, group_id: int, current_user: User) -> None:
+        """Delete a group"""
+        group = self.db.query(Group).filter(Group.id == group_id).first()
+        if not group:
+            raise NotFoundError("Group not found")
+            
+        if group.owner_id != current_user.id:
+            raise PermissionDenied("Only the group owner can delete the group")
+        
+        try:
+            # Delete all associated passwords
+            self.db.query(Password).filter(Password.group_id == group_id).delete()
+            
+            # Delete the group
+            self.db.delete(group)
+            self.db.commit()
+        except Exception as e:
+            self.db.rollback()
+            raise Exception(f"Failed to delete group: {str(e)}")
