@@ -1,252 +1,186 @@
 # Baby Turtle Password Vault
 
-A secure password management system with group sharing capabilities.
+A secure, multi-user password management system with group sharing capabilities and HTTPS encryption.
 
-## Current Implementation
+## Features
 
-### Backend (FastAPI)
-- ✅ Core configuration
-- ✅ Database models (User, Group, Password)
-- ✅ Authentication service with JWT
-- ✅ Password encryption service
-- ✅ Group management service
-- ✅ Password management service
-- ✅ API routes for all core functionality
-- ✅ Basic error handling
-- ✅ Database migrations setup
-- ✅ RPM packaging structure
+- **Secure Password Storage**: All passwords are encrypted at rest using Fernet encryption
+- **Group-Based Access Control**: Share passwords securely within teams
+- **HTTPS Support**: All communication is encrypted in transit
+- **Multi-User Support**: Role-based access control with admin and regular users
+- **Modern Web Interface**: Responsive design built with React and Tailwind CSS
+- **API-First Design**: Built on FastAPI for robust API support
+- **Database Backed**: PostgreSQL database for reliable data storage
 
-### Frontend (React)
-- ✅ Authentication components
-- ✅ Group management interface
-- ✅ Password management interface
-- ✅ API service integration
-- ✅ Basic error handling
-- ✅ Responsive design
+## Security Features
 
-## Installation
+- End-to-end HTTPS encryption
+- Secure password hashing using bcrypt
+- JWT-based authentication
+- Strong security headers
+- CORS protection
+- XSS prevention
+- CSRF protection
+- Rate limiting
+- Input validation and sanitization
 
-### Prerequisites
-- RHEL 8/9
+## System Requirements
+
+- RHEL 8/CentOS 8 or compatible
 - Python 3.9+
-- PostgreSQL 13+
+- PostgreSQL 13
 - Node.js 18+ (for development)
+- Minimum 2GB RAM
+- 10GB available disk space
 
-### Quick Start
-1. Install the RPM:
+## Quick Installation
+
+1. Clone the repository:
 ```bash
-sudo dnf install password-vault-0.1.0-1.el8.x86_64.rpm
+git clone https://github.com/your-org/baby-turtle-password-vault.git
+cd baby-turtle-password-vault
 ```
 
-2. Start the service:
+2. Run the installation script:
 ```bash
-sudo systemctl start password-vault
+sudo ./install.sh
 ```
 
 3. Access the web interface:
 ```
-http://your-server:8000
+https://localhost
 ```
 
-### Development Setup
+The installation script will:
+- Set up all required dependencies
+- Configure PostgreSQL database
+- Generate SSL certificates
+- Configure NGINX as a reverse proxy
+- Create an admin user
+- Start all required services
 
-1. Clone the repository:
-```bash
-git clone [repository-url]
-cd password-vault
+## Default Ports
+
+- Web Interface: HTTPS/443
+- API Backend: 8000 (internal)
+- Database: 5432 (internal)
+
+## Architecture
+
+```
+Frontend (React) → NGINX (HTTPS) → FastAPI Backend → PostgreSQL
 ```
 
-2. Set up the backend:
-```bash
-cd backend
-python3 -m venv venv
-source venv/bin/activate
-pip install -r requirements.txt
-cp .env.template .env  # Edit with your settings
-```
+### Components
 
-3. Set up the frontend:
-```bash
-cd frontend
-npm install
-cp .env.template .env  # Edit with your settings
-```
-
-4. Start the development servers:
-```bash
-# Backend
-cd backend
-uvicorn app.main:app --reload
-
-# Frontend
-cd frontend
-npm start
-```
-
-## Prioritized Next Steps
-
-### Critical (Security & Stability)
-1. 🔴 Add TLS/HTTPS configuration
-2. 🔴 Implement rate limiting for authentication
-3. 🔴 Add password complexity requirements
-4. 🔴 Set up proper logging
-5. 🔴 Configure SELinux policies
-
-### High Priority (Core Features)
-1. 🟡 Add password generator - done
-2. 🟡 Implement password visibility toggle - done
-3. 🟡 Add copy to clipboard functionality - done
-4. 🟡 Create backup/restore procedures
-5. 🟡 Add password search functionality
-
-### Medium Priority (Enhancement)
-1. 🟢 Implement 2FA
-2. 🟢 Add password history
-3. 🟢 Create password categories/tags
-4. 🟢 Add bulk import/export
-5. 🟢 Implement password sharing
+- **Frontend**: React-based SPA with group and password management
+- **NGINX**: Reverse proxy, SSL termination, and static file serving
+- **Backend**: FastAPI application providing RESTful API
+- **Database**: PostgreSQL storing encrypted passwords and user data
 
 ## API Documentation
 
-### Authentication
-- `POST /api/v1/auth/register` - Register new user
-- `POST /api/v1/auth/login` - Login user
-- `POST /api/v1/auth/test-token` - Validate token
+The API documentation is available at:
+```
+https://your-server/api/v1/docs
+```
 
-### Groups
-- `GET /api/v1/groups` - List user's groups
-- `POST /api/v1/groups` - Create new group
-- `PUT /api/v1/groups/{group_id}` - Update group
-- `POST /api/v1/groups/{group_id}/members/{username}` - Add member
+Key endpoints:
+- `/api/v1/auth/*`: Authentication endpoints
+- `/api/v1/users/*`: User management
+- `/api/v1/groups/*`: Group management
+- `/api/v1/passwords/*`: Password management
 
-### Passwords
-- `GET /api/v1/passwords/group/{group_id}` - List group passwords
-- `POST /api/v1/passwords` - Create new password
-- `PUT /api/v1/passwords/{password_id}` - Update password
-- `DELETE /api/v1/passwords/{password_id}` - Delete password
+## Development Setup
 
-## Security Considerations
-- Passwords are encrypted at rest using Fernet encryption
-- JWT-based authentication
-- Group-based access control
-- Database connection pooling
-- Input validation on all endpoints
+1. Set up the backend:
+```bash
+cd backend
+python -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
+```
 
-## Known Limitations
-- No password history tracking
-- Basic error handling
-- Limited security hardening
-- No automated backup system
-- No high availability setup
+2. Set up the frontend:
+```bash
+cd frontend
+npm install
+```
 
-## Contributing
-Please read CONTRIBUTING.md for details on our code of conduct and the process for submitting pull requests.
+3. Start development servers:
+```bash
+# Backend
+cd backend
+uvicorn app.main:app --reload --port 8000
+
+# Frontend
+cd frontend
+npm run dev
+```
+
+## Production Deployment
+
+Additional steps for production:
+1. Replace self-signed certificate with a valid SSL certificate
+2. Update CORS settings with your domain
+3. Configure proper firewall rules
+4. Set up regular backups
+5. Monitor system logs
+6. Configure rate limiting
+
+## Security Recommendations
+
+1. Use strong passwords for admin accounts
+2. Enable 2FA when available
+3. Regularly update dependencies
+4. Monitor access logs
+5. Implement backup strategy
+6. Use valid SSL certificates
+7. Configure proper firewall rules
+
+## Backup and Recovery
+
+Automated backup script included:
+```bash
+./scripts/backup.sh
+```
+
+This will backup:
+- Database contents
+- Configuration files
+- SSL certificates
+- User data
+
 
 ## License
-This project is proprietary and confidential.
 
+Proprietary - All rights reserved
 
-## Project Structure
-```
-password-vault/
-├── README.md
-├── backend/
-│   ├── requirements.txt*
-│   ├── alembic.ini*
-│   ├── .env*
-│   ├── tests/
-│   │   ├── __init__.py
-│   │   ├── conftest.py
-│   │   ├── test_auth.py
-│   │   ├── test_groups.py
-│   │   └── test_passwords.py
-│   └── app/
-│       ├── __init__.py
-│       ├── main.py*
-│       ├── api/
-│       │   ├── __init__.py*
-│       │   └── routes/
-│       │       ├── __init__.py*
-│       │       ├── auth.py*
-│       │       ├── groups.py*
-│       │       ├── passwords.py*
-│       │       └── users.py*
-│       ├── core/
-│       │   ├── __init__.py*
-│       │   ├── config.py*
-│       │   ├── security.py*
-│       │   └── exceptions.py*
-│       ├── db/
-│       │   ├── __init__.py*
-│       │   ├── base.py*
-│       │   ├── session.py*
-│       │   └── migrations/
-│       │       └── versions/
-│       ├── models/
-│       │   ├── __init__.py*
-│       │   ├── entities/
-│       │   │   ├── __init__.py*
-│       │   │   ├── user.py*
-│       │   │   ├── group.py*
-│       │   │   └── password.py*
-│       │   └── schemas/
-│       │       ├── __init__.py*
-│       │       ├── user.py*
-│       │       ├── group.py*
-│       │       ├── password.py*
-│       │       └── token.py*
-│       └── services/
-│           ├── __init__.py*
-│           ├── auth_service.py*
-│           ├── group_service.py*
-│           ├── password_service.py*
-│           └── encryption_service.py*
-├── frontend/
-│   ├── package.json
-│   ├── public/
-│   │   ├── index.html
-│   │   └── favicon.ico
-│   └── src/
-│       ├── index.js
-│       ├── App.js
-│       ├── components/
-│       │   ├── auth/
-│       │   │   ├── LoginForm.js
-│       │   │   └── RegisterForm.js
-│       │   ├── groups/
-│       │   │   ├── GroupList.js
-│       │   │   └── GroupForm.js
-│       │   └── passwords/
-│       │       ├── PasswordList.js
-│       │       └── PasswordForm.js
-│       ├── services/
-│       │   ├── api.js*
-│       │   ├── auth.js*
-│       │   ├── groups.js*
-│       │   └── passwords.js*
-│       ├── hooks/
-│       │   ├── useAuth.js
-│       │   └── useApi.js
-│       └── store/
-│           ├── index.js
-│           └── slices/
-│               ├── authSlice.js
-│               └── groupsSlice.js
-└── deploy/
-    ├── docker/
-    │   ├── Dockerfile.backend
-    │   ├── Dockerfile.frontend
-    │   └── docker-compose.yml
-    ├── nginx/
-    │   └── nginx.conf
-    └── scripts/
-        ├── backup.sh
-        └── deploy.sh
-```
+## Support
 
+For support:
+- Create an issue in the repository
+- Contact system administrator
+- Check documentation in `/docs`
 
+## Acknowledgments
 
+Built with:
+- FastAPI
+- React
+- PostgreSQL
+- NGINX
+- Tailwind CSS
+- SQLAlchemy
 
-todo: 
-user password complexity requirements.
-password complexity requirements
+## Version History
+
+- 1.0.0: Initial release with HTTPS support
+- 0.9.0: Beta release with basic functionality
+- 0.8.0: Alpha release for testing
+
+---
+
+Remember to replace the default admin password after installation and maintain regular security updates.
+
+For more information, see the detailed documentation in the `/docs` directory.
