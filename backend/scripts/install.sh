@@ -101,6 +101,12 @@ install_system_deps() {
 
     # Additional dependencies
     dnf install -y openssl-devel libffi-devel
+
+    # Install Node.js and npm
+    dnf install -y nodejs npm
+
+    # Install Vite globally
+    npm install -g vite
 }
 
 # Install Python dependencies
@@ -117,101 +123,135 @@ install_python_deps() {
 setup_ssl() {
     log_info "Setting up SSL certificates..."
     
-    # Generate strong SSL parameters
-    openssl dhparam -out "${CONFIG_DIR}/ssl/dhparam.pem" 2048
-
-    # Generate self-signed certificate
+    # Create directory for certificates
+    mkdir -p "${CONFIG_DIR}/ssl"
+    
+    # Generate self-signed certificate with proper permissions
     openssl req -x509 \
         -newkey rsa:4096 \
+        -nodes \
+        -days 365 \
         -keyout "${CONFIG_DIR}/ssl/key.pem" \
         -out "${CONFIG_DIR}/ssl/cert.pem" \
-        -days 365 \
-        -nodes \
-        -subj "/C=US/ST=State/L=City/O=Organization/CN=localhost" \
+        -subj "/CN=localhost" \
         -addext "subjectAltName=DNS:localhost,IP:127.0.0.1"
 
-    # Set proper permissions
-    chown -R "${SERVICE_USER}:${SERVICE_GROUP}" "${CONFIG_DIR}/ssl/"*
+    # Set permissions
     chmod 600 "${CONFIG_DIR}/ssl/key.pem"
-    chmod 600 "${CONFIG_DIR}/ssl/dhparam.pem"
     chmod 644 "${CONFIG_DIR}/ssl/cert.pem"
+    chown -R nginx:nginx "${CONFIG_DIR}/ssl"
 }
-
 # Configure NGINX
 setup_nginx() {
     log_info "Configuring NGINX..."
     
     # Create NGINX configuration
-    cat > /etc/nginx/conf.d/password-vault.conf << EOF
-# Security headers
-map \$http_upgrade \$connection_upgrade {
-    default upgrade;
-    ''      close;
+    cat > /etc/nginx/nginx.conf << 'EOF'
+user nginx;
+worker_processes auto;
+error_log /var/log/nginx/error.log;
+pid /run/nginx.pid;
+
+events {
+    worker_connections 1024;
 }
 
-server {
-    listen 80;
-    server_name localhost;
-    return 301 https://\$server_name\$request_uri;
-}
-
-server {
-    listen 443 ssl http2;
-    server_name localhost;
+http {
+    include             /etc/nginx/mime.types;
+    default_type        application/octet-stream;
+    
+    log_format  main  '$remote_addr - $remote_user [$time_local] "$request" '
+                      '$status $body_bytes_sent "$http_referer" '
+                      '"$http_user_agent" "$http_x_forwarded_for"';
+    
+    access_log         /var/log/nginx/access.log  main;
+    sendfile           on;
+    keepalive_timeout  65;
 
     # SSL configuration
-    ssl_certificate ${CONFIG_DIR}/ssl/cert.pem;
-    ssl_certificate_key ${CONFIG_DIR}/ssl/key.pem;
-    ssl_dhparam ${CONFIG_DIR}/ssl/dhparam.pem;
-
-    ssl_protocols TLSv1.2 TLSv1.3;
-    ssl_prefer_server_ciphers off;
-    ssl_ciphers ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-CHACHA20-POLY1305:ECDHE-RSA-CHACHA20-POLY1305:DHE-RSA-AES128-GCM-SHA256:DHE-RSA-AES256-GCM-SHA384;
-
-    # SSL sessions
     ssl_session_timeout 1d;
     ssl_session_cache shared:SSL:50m;
     ssl_session_tickets off;
 
-    # HSTS
-    add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
+    # modern configuration
+    ssl_protocols TLSv1.2 TLSv1.3;
+    ssl_ciphers ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-CHACHA20-POLY1305:ECDHE-RSA-CHACHA20-POLY1305:DHE-RSA-AES128-GCM-SHA256:DHE-RSA-AES256-GCM-SHA384;
+    ssl_prefer_server_ciphers off;
 
-    # Security headers
-    add_header X-Content-Type-Options "nosniff" always;
-    add_header X-Frame-Options "DENY" always;
-    add_header X-XSS-Protection "1; mode=block" always;
-    add_header Referrer-Policy "strict-origin-when-cross-origin" always;
-    add_header Permissions-Policy "geolocation=(),midi=(),sync-xhr=(),microphone=(),camera=(),magnetometer=(),gyroscope=(),fullscreen=(self),payment=()" always;
-    add_header Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:; connect-src 'self';" always;
-
-    # Proxy settings
-    location /api {
-        proxy_pass http://127.0.0.1:8000;
-        proxy_http_version 1.1;
-        proxy_set_header Host \$host;
-        proxy_set_header X-Real-IP \$remote_addr;
-        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto \$scheme;
-        proxy_set_header Upgrade \$http_upgrade;
-        proxy_set_header Connection \$connection_upgrade;
-        proxy_buffering off;
-        proxy_redirect off;
-        proxy_read_timeout 300s;
+    server {
+        listen 80;
+        listen [::]:80;
+        server_name localhost;
+        
+        return 301 https://$host$request_uri;
     }
 
-    location / {
-        root ${INSTALL_DIR}/frontend;
-        try_files \$uri \$uri/ /index.html;
-        add_header Cache-Control "no-store, no-cache, must-revalidate";
-        expires 0;
+    server {
+        listen 443 ssl http2;
+        listen [::]:443 ssl http2;
+        server_name localhost;
+
+        ssl_certificate /etc/password-vault/ssl/cert.pem;
+        ssl_certificate_key /etc/password-vault/ssl/key.pem;
+
+        # Add these security headers
+        add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
+        add_header X-Frame-Options "SAMEORIGIN" always;
+        add_header X-Content-Type-Options "nosniff" always;
+        add_header X-XSS-Protection "1; mode=block" always;
+        add_header Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline';" always;
+
+        # Development server proxy
+        location / {
+            proxy_pass http://127.0.0.1:3000;
+            proxy_http_version 1.1;
+            proxy_set_header Upgrade $http_upgrade;
+            proxy_set_header Connection 'upgrade';
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+            proxy_cache_bypass $http_upgrade;
+        }
+
+        # API proxy
+        location /api {
+            proxy_pass http://127.0.0.1:8000;
+            proxy_http_version 1.1;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+        }
     }
 }
 EOF
 
-    # Test and enable NGINX configuration
+    # Remove any existing config in conf.d
+    rm -f /etc/nginx/conf.d/*
+
+    # Test and restart NGINX
     nginx -t
-    systemctl enable nginx
     systemctl restart nginx
+
+    log_info "NGINX configured successfully"
+}
+# Add or update setup_selinux function
+setup_selinux() {
+    log_info "Configuring SELinux..."
+    
+    # Install SELinux utilities if not present
+    dnf install -y policycoreutils-python-utils
+    
+    # Allow NGINX to connect to network
+    setsebool -P httpd_can_network_connect 1
+    
+    # Allow NGINX to read the SSL certificates
+    chcon -R -t httpd_sys_content_t "${CONFIG_DIR}/ssl"
+    
+    # Set proper context for SSL private key
+    chcon -t cert_t "${CONFIG_DIR}/ssl/cert.pem"
+    chcon -t cert_t "${CONFIG_DIR}/ssl/key.pem"
 }
 
 # Setup database
@@ -682,6 +722,42 @@ EOF
     log_info "Backup system installed and scheduled"
 }
 
+# # Add this new function
+# setup_frontend() {
+#     log_info "Setting up frontend..."
+    
+#     # Create frontend directory
+#     mkdir -p "${INSTALL_DIR}/frontend"
+    
+#     # Copy frontend files
+#     cp -r "${BACKEND_DIR}/frontend"/* "${INSTALL_DIR}/frontend/"
+    
+#     # Install dependencies and build
+#     cd "${INSTALL_DIR}/frontend"
+#     npm install
+#     npm run build
+    
+#     # Create static file directory
+#     mkdir -p "${INSTALL_DIR}/frontend/dist"
+# }
+debug_setup() {
+    log_info "Checking setup..."
+    
+    # Check certificates
+    openssl x509 -in "${CONFIG_DIR}/ssl/cert.pem" -text -noout
+    
+    # Check NGINX config
+    nginx -T
+    
+    # Check permissions
+    ls -la "${CONFIG_DIR}/ssl"
+    
+    # Check SELinux
+    sestatus
+    
+    # Show listening ports
+    ss -tulpn | grep -E ':80|:443|:3000|:8000'
+}
 # Main installation process
 main() {
     log_info "Starting Password Vault installation..."
@@ -691,6 +767,7 @@ main() {
     install_system_deps
     setup_ssl              # New step for HTTPS
     setup_nginx           # New step for HTTPS
+    setup_selinux 
     install_python_deps
     setup_database
     create_config_files
@@ -700,6 +777,8 @@ main() {
     setup_systemd
     set_permissions
     setup_backup  
+    debug_setup
+    # setup_frontend 
     
     # Start services in correct order
     systemctl start postgresql-13
