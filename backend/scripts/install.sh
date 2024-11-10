@@ -113,11 +113,10 @@ install_python_deps() {
     pip install -r "${BACKEND_DIR}/requirements.txt"
 }
 
-# Setup SSL certificates
 setup_ssl() {
     log_info "Setting up SSL certificates..."
     
-    # Generate strong SSL parameters
+    # Generate strong DH parameters (this might take a few minutes)
     openssl dhparam -out "${CONFIG_DIR}/ssl/dhparam.pem" 2048
 
     # Generate self-signed certificate
@@ -127,8 +126,7 @@ setup_ssl() {
         -out "${CONFIG_DIR}/ssl/cert.pem" \
         -days 365 \
         -nodes \
-        -subj "/C=US/ST=State/L=City/O=Organization/CN=localhost" \
-        -addext "subjectAltName=DNS:localhost,IP:127.0.0.1"
+        -subj "/C=US/ST=State/L=City/O=Organization/CN=localhost"
 
     # Set proper permissions
     chown -R "${SERVICE_USER}:${SERVICE_GROUP}" "${CONFIG_DIR}/ssl/"*
@@ -164,15 +162,18 @@ server {
     listen 443 ssl http2;
     server_name localhost;
 
-    # SSL configuration
+    # SSL configuration   
     ssl_certificate ${CONFIG_DIR}/ssl/cert.pem;
     ssl_certificate_key ${CONFIG_DIR}/ssl/key.pem;
+    ssl_dhparam ${CONFIG_DIR}/ssl/dhparam.pem;
 
-    
-    # SSL configuration
     ssl_protocols TLSv1.2 TLSv1.3;
-    ssl_ciphers ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-CHACHA20-POLY1305:ECDHE-RSA-CHACHA20-POLY1305;
     ssl_prefer_server_ciphers off;
+    ssl_ciphers ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-CHACHA20-POLY1305:ECDHE-RSA-CHACHA20-POLY1305:DHE-RSA-AES128-GCM-SHA256:DHE-RSA-AES256-GCM-SHA384;
+
+    ssl_session_timeout 1d;
+    ssl_session_cache shared:SSL:50m;
+    ssl_session_tickets off;
 
 
     location / {
