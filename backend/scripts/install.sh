@@ -149,10 +149,15 @@ map \$http_upgrade \$connection_upgrade {
     ''      close;
 }
 
+# HTTP -> HTTPS redirect for both main site and dev server
 server {
     listen 80;
     server_name localhost;
-    return 301 https://\$server_name\$request_uri;
+    
+    # Redirect all HTTP traffic to HTTPS
+    location / {
+        return 301 https://$host$request_uri;
+    }
 }
 
 server {
@@ -162,48 +167,39 @@ server {
     # SSL configuration
     ssl_certificate ${CONFIG_DIR}/ssl/cert.pem;
     ssl_certificate_key ${CONFIG_DIR}/ssl/key.pem;
-    ssl_dhparam ${CONFIG_DIR}/ssl/dhparam.pem;
 
+    
+    # SSL configuration
     ssl_protocols TLSv1.2 TLSv1.3;
+    ssl_ciphers ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-CHACHA20-POLY1305:ECDHE-RSA-CHACHA20-POLY1305;
     ssl_prefer_server_ciphers off;
-    ssl_ciphers ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-CHACHA20-POLY1305:ECDHE-RSA-CHACHA20-POLY1305:DHE-RSA-AES128-GCM-SHA256:DHE-RSA-AES256-GCM-SHA384;
 
-    # SSL sessions
-    ssl_session_timeout 1d;
-    ssl_session_cache shared:SSL:50m;
-    ssl_session_tickets off;
 
-    # HSTS
-    add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
+    location / {
+        proxy_pass http://localhost:3000;
+        proxy_http_version 1.1;
+        proxy_set_header Host \$host;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto https;
+        
+        # WebSocket support
+        proxy_set_header Upgrade \$http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_read_timeout 86400;
+        
+        proxy_redirect off;
+    }
 
-    # Security headers
-    add_header X-Content-Type-Options "nosniff" always;
-    add_header X-Frame-Options "DENY" always;
-    add_header X-XSS-Protection "1; mode=block" always;
-    add_header Referrer-Policy "strict-origin-when-cross-origin" always;
-    add_header Permissions-Policy "geolocation=(),midi=(),sync-xhr=(),microphone=(),camera=(),magnetometer=(),gyroscope=(),fullscreen=(self),payment=()" always;
-    add_header Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:; connect-src 'self';" always;
-
-    # Proxy settings
+    # API requests
     location /api {
         proxy_pass http://127.0.0.1:8000;
         proxy_http_version 1.1;
         proxy_set_header Host \$host;
         proxy_set_header X-Real-IP \$remote_addr;
         proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto \$scheme;
-        proxy_set_header Upgrade \$http_upgrade;
-        proxy_set_header Connection \$connection_upgrade;
-        proxy_buffering off;
+        proxy_set_header X-Forwarded-Proto https;
         proxy_redirect off;
-        proxy_read_timeout 300s;
-    }
-
-    location / {
-        root ${INSTALL_DIR}/frontend;
-        try_files \$uri \$uri/ /index.html;
-        add_header Cache-Control "no-store, no-cache, must-revalidate";
-        expires 0;
     }
 }
 EOF
@@ -416,11 +412,10 @@ init_database() {
     fi
 }
 
-# Create admin initialization script
+# # Create admin initialization script
 create_admin_init_script() {
     log_info "Creating admin initialization script..."
-    cat > "${INSTALL_DIR}/create_admin.py" << EOF
-import asyncio
+    cat > "${INSTALL_DIR}/create_admin.py" << 'EOF'
 from sqlalchemy.orm import Session
 from app.db.session import SessionLocal
 from app.models.entities import User
@@ -682,6 +677,30 @@ EOF
     log_info "Backup system installed and scheduled"
 }
 
+
+# Add to the installation script
+setup_frontend() {
+    log_info "Setting up frontend..."
+    
+    # Install Node.js and npm (if not already in your dependencies)
+    dnf install -y nodejs npm
+
+    # Create frontend directory
+    mkdir -p "${INSTALL_DIR}/frontend"
+    
+    # Copy frontend files
+    cp -r "${BACKEND_DIR}/../frontend"/* "${INSTALL_DIR}/frontend/"
+    
+    # Install dependencies and build
+    cd "${INSTALL_DIR}/frontend"
+    npm install
+    npm run build
+    
+    # Ensure proper permissions
+    chown -R "${SERVICE_USER}:${SERVICE_GROUP}" "${INSTALL_DIR}/frontend"
+}
+
+
 # Main installation process
 main() {
     log_info "Starting Password Vault installation..."
@@ -689,6 +708,7 @@ main() {
     create_directories
     create_service_user
     install_system_deps
+    # setup_frontend
     setup_ssl              # New step for HTTPS
     setup_nginx           # New step for HTTPS
     install_python_deps
