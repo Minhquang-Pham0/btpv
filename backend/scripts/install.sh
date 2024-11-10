@@ -416,7 +416,7 @@ init_database() {
 # # Create admin initialization script
 create_admin_init_script() {
     log_info "Creating admin initialization script..."
-    cat > "${INSTALL_DIR}/create_admin.py" << 'EOF'
+    cat > "${INSTALL_DIR}/create_admin.py" << EOF
 from sqlalchemy.orm import Session
 from app.db.session import SessionLocal
 from app.models.entities import User
