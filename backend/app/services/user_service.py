@@ -9,11 +9,13 @@ from ..models.entities import User
 from ..models.schemas import UserCreate, UserUpdate
 from ..core.exceptions import PermissionDenied, DuplicateError, NotFoundError
 from ..db import get_db
+from .log_service import LogService
 
 class UserService:
-    def __init__(self, db: Session = Depends(get_db)):
+    def __init__(self, db: Session = Depends(get_db), logging: LogService = Depends()):
         """Initialize UserService with database session"""
         self.db = db
+        self.logging = logging 
 
     async def get_users(self, current_user: User) -> List[User]:
         """Get all users (admin only)"""
@@ -45,6 +47,11 @@ class UserService:
         self.db.add(user)
         self.db.commit()
         self.db.refresh(user)
+
+        log = await self.logging.create_log("User " + str(current_user.id) + " created User " + str(user.id))
+        await self.logging.create_association(log, current_user.id, "user")
+        await self.logging.create_association(log, user.id, "user")
+
         return user
 
     async def get_user(self, user_id: int, current_user: User) -> User:

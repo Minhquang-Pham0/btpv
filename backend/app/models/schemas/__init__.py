@@ -3,6 +3,7 @@ from .user import UserBase, UserCreate, UserUpdate, User, UserInDB, UserChangePa
 from .group import GroupBase, GroupCreate, GroupUpdate, Group
 from .password import PasswordBase, PasswordCreate, PasswordUpdate, Password, PasswordInDB
 from .token import Token, TokenPayload
+from .log import Log, LogAssociation
 
 __all__ = [
     "UserBase",
@@ -21,5 +22,7 @@ __all__ = [
     "Password",
     "PasswordInDB",
     "Token",
-    "TokenPayload"
+    "TokenPayload",
+    "Log",
+    "LogAssociation"
 ]

@@ -5,10 +5,13 @@ from ..models.entities import Group, User, Password
 from ..models.schemas import GroupCreate, GroupUpdate
 from ..core.exceptions import NotFoundError, PermissionDenied
 from ..db import get_db
+from .log_service import LogService
+
 
 class GroupService:
-    def __init__(self, db: Session = Depends(get_db)):
+    def __init__(self, db: Session = Depends(get_db), logging: LogService = Depends()):
         self.db = db
+        self.logging = logging
 
     async def create_group(self, group_data: GroupCreate, user: User) -> Group:
         """Create a new group"""
@@ -22,6 +25,11 @@ class GroupService:
         self.db.add(group)
         self.db.commit()
         self.db.refresh(group)
+
+        log = await self.logging.create_log("User " + str(user.id) + " created Group " + str(group.id))
+        await self.logging.create_association(log, user.id, "user")
+        await self.logging.create_association(log, group.id, "group")
+
         return group
 
     async def get_group(self, group_id: int, user: User) -> Group:

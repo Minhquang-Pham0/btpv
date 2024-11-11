@@ -10,12 +10,15 @@ from ..models.schemas import UserCreate, Token
 from ..core.exceptions import AuthenticationError, DuplicateError
 from ..db import get_db
 from ..core.security import verify_access_token
+from .log_service import LogService
+
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl=f"{settings.API_V1_STR}/auth/login")
 
 class AuthService:
-    def __init__(self, db: Session = Depends(get_db)):
+    def __init__(self, db: Session = Depends(get_db), logging: LogService = Depends()):
         self.db = db
+        self.logging = logging
 
     def create_access_token(self, subject: str) -> Token:
         """Create access token for given subject"""
@@ -76,6 +79,10 @@ class AuthService:
         self.db.add(user)
         self.db.commit()
         self.db.refresh(user)
+
+        log = await self.logging.create_log("Created User " + str(user.id))
+        await self.logging.create_association(log, user.id, "user")
+
         return user
 
     @classmethod

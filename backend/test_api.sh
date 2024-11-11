@@ -92,6 +92,14 @@ main() {
     api_call -X POST "${BASE_URL}/passwords/generate" \
         -H "$AUTH_HEADER" \
         -d "length=16" | jq '.'
+
+    echo "8. Get Logs"
+    api_call -X GET "${BASE_URL}/logs" \
+        -H "$AUTH_HEADER" | jq '.'
+
+    echo "8. Get Logs by group id"
+    api_call -X GET "${BASE_URL}/logs/group/${GROUP_ID}" \
+        -H "$AUTH_HEADER" | jq '.'
 }
 
 main
