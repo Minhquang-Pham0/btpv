@@ -123,9 +123,9 @@ restore_backup() {
     log_info "Restoring SSL certificates..."
     cp -r "${TEMP_DIR}/password-vault-backup/ssl"/* "${CONFIG_DIR}/ssl/"
 
-    # Restore NGINX configuration
-    log_info "Restoring NGINX configuration..."
-    cp "${TEMP_DIR}/password-vault-backup/nginx.conf" /etc/nginx/conf.d/password-vault.conf
+    # # Restore NGINX configuration
+    # log_info "Restoring NGINX configuration..."
+    # cp "${TEMP_DIR}/password-vault-backup/nginx.conf" /etc/nginx/conf.d/password-vault.conf
 
     # Set proper permissions
     log_info "Setting permissions..."
