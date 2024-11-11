@@ -184,3 +184,12 @@ Built with:
 Remember to replace the default admin password after installation and maintain regular security updates.
 
 For more information, see the detailed documentation in the `/docs` directory.
+
+
+
+
+
+TODO:
+Allow users to change password
+Allow passwords in groups to be updated
+password min complexity
