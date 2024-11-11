@@ -792,6 +792,8 @@ setup_nginx_permissions() {
 
     # Set ownership recursively
     chown -R nginx:nginx "${INSTALL_DIR}/frontend"
+    chmod 755 "${INSTALL_DIR}"
+
     
     # Set directory permissions
     find "${INSTALL_DIR}/frontend" -type d -exec chmod 755 {} \;
