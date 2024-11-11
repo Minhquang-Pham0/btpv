@@ -577,7 +577,7 @@ set_permissions() {
     chown -R "${SERVICE_USER}:${SERVICE_GROUP}" "${LOG_DIR}"
     chown -R "${SERVICE_USER}:${SERVICE_GROUP}" "${DATA_DIR}"
     
-    chmod 750 "${INSTALL_DIR}"
+    chmod 755 "${INSTALL_DIR}"
     chmod 750 "${CONFIG_DIR}"
     chmod 750 "${LOG_DIR}"
     chmod 750 "${DATA_DIR}"
@@ -792,7 +792,6 @@ setup_nginx_permissions() {
 
     # Set ownership recursively
     chown -R nginx:nginx "${INSTALL_DIR}/frontend"
-    chmod 755 "${INSTALL_DIR}"
 
     
     # Set directory permissions
