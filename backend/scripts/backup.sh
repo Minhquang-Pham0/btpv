@@ -95,7 +95,7 @@ restore_backup() {
     if [ ! -f "$backup_file" ]; then
         log_error "Backup file not found: $backup_file"
         exit 1
-    }
+    fi
 
     log_info "Starting restore process from: $backup_file"
     
