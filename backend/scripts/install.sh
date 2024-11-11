@@ -56,6 +56,7 @@ ADMIN_PASSWORD=$(generate_password)
 create_directories() {
     log_info "Creating directory structure..."
     mkdir -p "${INSTALL_DIR}/app"
+    mkdir -p "${INSTALL_DIR}/frontend/build"
     mkdir -p "${CONFIG_DIR}"
     mkdir -p "${LOG_DIR}"
     mkdir -p "${DATA_DIR}"
@@ -113,10 +114,11 @@ install_python_deps() {
     pip install -r "${BACKEND_DIR}/requirements.txt"
 }
 
+# Setup SSL certificates
 setup_ssl() {
     log_info "Setting up SSL certificates..."
     
-    # Generate strong DH parameters (this might take a few minutes)
+    # Generate strong SSL parameters
     openssl dhparam -out "${CONFIG_DIR}/ssl/dhparam.pem" 2048
 
     # Generate self-signed certificate
@@ -126,7 +128,8 @@ setup_ssl() {
         -out "${CONFIG_DIR}/ssl/cert.pem" \
         -days 365 \
         -nodes \
-        -subj "/C=US/ST=State/L=City/O=Organization/CN=localhost"
+        -subj "/C=US/ST=State/L=City/O=Organization/CN=localhost" \
+        -addext "subjectAltName=DNS:localhost,IP:127.0.0.1"
 
     # Set proper permissions
     chown -R "${SERVICE_USER}:${SERVICE_GROUP}" "${CONFIG_DIR}/ssl/"*
@@ -135,72 +138,107 @@ setup_ssl() {
     chmod 644 "${CONFIG_DIR}/ssl/cert.pem"
 }
 
-# Configure NGINX
 setup_nginx() {
     log_info "Configuring NGINX..."
     
-    # Create NGINX configuration
-    cat > /etc/nginx/conf.d/password-vault.conf << EOF
-# Security headers
-map \$http_upgrade \$connection_upgrade {
-    default upgrade;
-    ''      close;
-}
-
-# HTTP -> HTTPS redirect for both main site and dev server
-server {
-    listen 80;
-    server_name localhost;
+    # Backup original nginx.conf
+    cp /etc/nginx/nginx.conf /etc/nginx/nginx.conf.backup
     
-    # Redirect all HTTP traffic to HTTPS
-    location / {
-        return 301 https://$host$request_uri;
-    }
+    # Create new main nginx.conf
+    cat > /etc/nginx/nginx.conf << EOF
+user nginx;
+worker_processes auto;
+error_log /var/log/nginx/error.log;
+pid /run/nginx.pid;
+
+include /usr/share/nginx/modules/*.conf;
+
+events {
+    worker_connections 1024;
+}
+
+http {
+    log_format  main  '\$remote_addr - \$remote_user [\$time_local] "\$request" '
+                      '\$status \$body_bytes_sent "\$http_referer" '
+                      '"\$http_user_agent" "\$http_x_forwarded_for"';
+    
+    access_log  /var/log/nginx/access.log  main;
+    
+    sendfile            on;
+    tcp_nopush          on;
+    tcp_nodelay         on;
+    keepalive_timeout   65;
+    types_hash_max_size 2048;
+    
+    include             /etc/nginx/mime.types;
+    default_type        application/octet-stream;
+    
+    # Load modular configuration files
+    include /etc/nginx/conf.d/*.conf;
+}
+EOF
+
+    # Create site configuration
+    cat > /etc/nginx/conf.d/password-vault.conf << EOF
+server {
+    listen 80 default_server;
+    listen [::]:80 default_server;
+    server_name _;
+    return 301 https://\$host\$request_uri;
 }
 
 server {
-    listen 443 ssl http2;
-    server_name localhost;
+    listen 443 ssl http2 default_server;
+    listen [::]:443 ssl http2 default_server;
+    server_name _;
 
-    # SSL configuration   
     ssl_certificate ${CONFIG_DIR}/ssl/cert.pem;
     ssl_certificate_key ${CONFIG_DIR}/ssl/key.pem;
     ssl_dhparam ${CONFIG_DIR}/ssl/dhparam.pem;
 
+    # SSL configuration
     ssl_protocols TLSv1.2 TLSv1.3;
     ssl_prefer_server_ciphers off;
     ssl_ciphers ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-CHACHA20-POLY1305:ECDHE-RSA-CHACHA20-POLY1305:DHE-RSA-AES128-GCM-SHA256:DHE-RSA-AES256-GCM-SHA384;
 
+    # SSL sessions
     ssl_session_timeout 1d;
     ssl_session_cache shared:SSL:50m;
     ssl_session_tickets off;
 
+    root /opt/password-vault/frontend/build;
+    index index.html;
+
+    # Security headers
+    add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
+    add_header X-Content-Type-Options "nosniff" always;
+    add_header X-Frame-Options "DENY" always;
+    add_header X-XSS-Protection "1; mode=block" always;
+    add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+    add_header Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:; connect-src 'self';" always;
 
     location / {
-        proxy_pass http://localhost:3000;
-        proxy_http_version 1.1;
-        proxy_set_header Host \$host;
-        proxy_set_header X-Real-IP \$remote_addr;
-        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto https;
-        
-        # WebSocket support
-        proxy_set_header Upgrade \$http_upgrade;
-        proxy_set_header Connection "upgrade";
-        proxy_read_timeout 86400;
-        
-        proxy_redirect off;
+        try_files \$uri \$uri/ /index.html;
     }
 
-    # API requests
-    location /api {
-        proxy_pass http://127.0.0.1:8000;
+    location /api/ {
+        proxy_pass http://127.0.0.1:8000/api/;
         proxy_http_version 1.1;
         proxy_set_header Host \$host;
         proxy_set_header X-Real-IP \$remote_addr;
         proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto https;
-        proxy_redirect off;
+        proxy_set_header X-Forwarded-Proto \$scheme;
+        
+        proxy_connect_timeout 60s;
+        proxy_send_timeout 60s;
+        proxy_read_timeout 60s;
+    }
+
+    location /health {
+        proxy_pass http://127.0.0.1:8000/health;
+        proxy_http_version 1.1;
+        proxy_set_header Host \$host;
+        proxy_set_header X-Real-IP \$remote_addr;
     }
 }
 EOF
@@ -209,6 +247,9 @@ EOF
     nginx -t
     systemctl enable nginx
     systemctl restart nginx
+    
+    # Debug output
+    log_info "Nginx configuration validated and service restarted"
 }
 
 # Setup database
@@ -416,7 +457,7 @@ init_database() {
 # # Create admin initialization script
 create_admin_init_script() {
     log_info "Creating admin initialization script..."
-    cat > "${INSTALL_DIR}/create_admin.py" << EOF
+    cat > "${INSTALL_DIR}/create_admin.py" << 'EOF'
 from sqlalchemy.orm import Session
 from app.db.session import SessionLocal
 from app.models.entities import User
@@ -679,52 +720,123 @@ EOF
 }
 
 
-# Add to the installation script
+# Install Node.js and build frontend
 setup_frontend() {
     log_info "Setting up frontend..."
     
-    # Install Node.js and npm (if not already in your dependencies)
-    dnf install -y nodejs npm
+    # Install Node.js repository and Node.js
+    log_info "Installing Node.js..."
+    dnf module reset nodejs -y
+    dnf module enable nodejs:20 -y
+    dnf module install nodejs:20 -y
 
     # Create frontend directory
-    mkdir -p "${INSTALL_DIR}/frontend"
-    
-    # Copy frontend files
-    cp -r "${BACKEND_DIR}/../frontend"/* "${INSTALL_DIR}/frontend/"
+    mkdir -p "${INSTALL_DIR}/frontend/build"
+
+    # Check if we're in the backend directory and need to go up one level
+    FRONTEND_DIR=""
+    if [[ -d "${BACKEND_DIR}/../frontend" ]]; then
+        FRONTEND_DIR="${BACKEND_DIR}/../frontend"
+    elif [[ -d "./frontend" ]]; then
+        FRONTEND_DIR="./frontend"
+    else
+        log_error "Frontend directory not found"
+        exit 1
+    fi
+
+    log_info "Building frontend from: ${FRONTEND_DIR}"
     
     # Install dependencies and build
-    cd "${INSTALL_DIR}/frontend"
-    npm install
+    cd "${FRONTEND_DIR}"
+    npm ci
     npm run build
-    
-    # Ensure proper permissions
+
+    if [ ! -d "build" ]; then
+        log_error "Frontend build failed - build directory not found"
+        exit 1
+    fi
+
+    # Copy build files to installation directory
+    log_info "Copying frontend files to ${INSTALL_DIR}/frontend/build"
+    cp -r build/* "${INSTALL_DIR}/frontend/build/"
+
+    # Set proper permissions
     chown -R "${SERVICE_USER}:${SERVICE_GROUP}" "${INSTALL_DIR}/frontend"
+    chmod -R 755 "${INSTALL_DIR}/frontend"
+
+    # Return to original directory
+    cd - > /dev/null
 }
 
+setup_nginx_permissions() {
+    log_info "Configuring SELinux and permissions for Nginx..."
+    
+    # Install SELinux utilities if not present
+    dnf install -y policycoreutils-python-utils setools-console
 
-# Main installation process
+    # Create required directories if they don't exist
+    mkdir -p "${INSTALL_DIR}/frontend/build"
+
+    # First, set base directory permissions
+    chmod 755 "${INSTALL_DIR}"
+    chmod 755 "${INSTALL_DIR}/frontend"
+    chmod 755 "${INSTALL_DIR}/frontend/build"
+
+    # Set SELinux context BEFORE changing ownership
+    semanage fcontext -a -t httpd_sys_content_t "${INSTALL_DIR}/frontend(/.*)?"; ret=$?
+    if [ $ret -ne 0 ]; then
+        # If it exists, modify it
+        semanage fcontext -m -t httpd_sys_content_t "${INSTALL_DIR}/frontend(/.*)?"
+    fi
+    restorecon -Rv "${INSTALL_DIR}/frontend"
+
+    # Set ownership recursively
+    chown -R nginx:nginx "${INSTALL_DIR}/frontend"
+    
+    # Set directory permissions
+    find "${INSTALL_DIR}/frontend" -type d -exec chmod 755 {} \;
+    
+    # Set file permissions
+    find "${INSTALL_DIR}/frontend" -type f -exec chmod 644 {} \;
+
+    # Allow nginx to connect to backend
+    setsebool -P httpd_can_network_connect 1
+    setsebool -P httpd_can_network_connect_db 1
+    
+    # Verify setup
+    log_info "Verifying permissions..."
+    ls -lZ "${INSTALL_DIR}/frontend/build"
+    ls -lZ "${INSTALL_DIR}/frontend"
+    
+    log_info "Verifying SELinux context..."
+    sestatus
+    getsebool -a | grep httpd
+}
+
 main() {
     log_info "Starting Password Vault installation..."
     
     create_directories
     create_service_user
     install_system_deps
-    # setup_frontend
-    setup_ssl              # New step for HTTPS
-    setup_nginx           # New step for HTTPS
+    setup_ssl
     install_python_deps
     setup_database
     create_config_files
     init_database
     create_admin_init_script
     init_admin_user
+    setup_frontend       # Build frontend FIRST
+    setup_nginx_permissions  # Then set permissions
+    setup_nginx         # Then configure and start nginx
     setup_systemd
     set_permissions
     setup_backup  
     
     # Start services in correct order
     systemctl start postgresql-13
-    systemctl start nginx
+    sudo systemctl stop nginx  # Stop nginx before final permission check
+    sudo systemctl start nginx # Start fresh with new permissions
     systemctl start password-vault
     
     log_info "Installation completed successfully!"
@@ -737,6 +849,5 @@ main() {
     log_info "Username: admin"
     log_info "Password: ${ADMIN_PASSWORD}"
 }
-
 # Run main installation
 main
